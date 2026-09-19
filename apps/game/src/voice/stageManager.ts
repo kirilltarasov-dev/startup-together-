@@ -8,6 +8,8 @@ import { getLiveClient } from './voiceSession'
 import { speakLine, ttsCancel, ttsIsMuted, ttsReset } from './tts'
 
 const GAP_MS = 350
+/** Keep the mic closed briefly after a TTS line so the speaker tail is not heard as player speech. */
+const MIC_RELEASE_MS = 250
 const WAIT_LIVE_SPEAKING_MAX_MS = 5000
 const WAIT_CHOOSE_MAX_MS = 20_000
 const POLL_MS = 100
@@ -39,7 +41,14 @@ async function playLine(line: Line): Promise<void> {
     if (await client.sayAsLive(line.text)) return
   }
   if (ttsIsMuted()) return
-  await speakLine(line.who, line.text)
+  // Close the mic while the speakers play a founder line; otherwise the live model hears it as the player.
+  client.setMicHold(true)
+  try {
+    await speakLine(line.who, line.text)
+    await sleep(MIC_RELEASE_MS)
+  } finally {
+    client.setMicHold(false)
+  }
 }
 
 async function run(): Promise<void> {

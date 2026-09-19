@@ -26,7 +26,7 @@ export default function App() {
   // Voice (Lane V) → same validated path as buttons. The Play scene consumes runStore.voiceRequest.
   useEffect(() => connectVoiceBridge((event, choiceId, constraint) => {
     const ev = currentEvent(useGame.getState())
-    if (!ev || ev.id !== event.id || !ev.choices.some((c) => c.id === choiceId)) return false
+    if (!ev || ev.id !== event.id || (choiceId !== 'continue' && !ev.choices.some((c) => c.id === choiceId))) return false
     useRun.getState().requestVoiceChoice(event.id, choiceId, constraint)
     return true
   }), [])

@@ -35,6 +35,8 @@ export interface LiveClient {
   sayAsLive(text: string): Promise<boolean>
   isSpeaking(): boolean
   isChooseInFlight(): boolean
+  /** Close/open the mic around local TTS playback (independent of the user's Mute). */
+  setMicHold(hold: boolean): void
   /** Fires on the first input transcript delta after >= 1.5 s of silence (a new player turn). */
   onPlayerSpeech(cb: () => void): () => void
 }
@@ -75,6 +77,7 @@ const CHOICE_SYNONYMS: Record<string, string[]> = {
   disable_feed: ['disable', 'turn off', 'kill the feed', 'shut it', 'switch off', 'take it down'],
   accept: ['accept', 'take the', 'take it', 'deal', 'yes to the', 'sign', 'bridge'],
   decline: ['decline', 'no deal', 'independent', 'walk away', 'pass', 'reject', 'refuse'],
+  continue: ['continue', 'next', 'go on', 'move on', 'keep going', 'lets go', 'let s go', 'carry on', 'proceed', 'okay go', 'onwards', 'next scene'],
 }
 
 let eventCounter = 0
@@ -230,7 +233,8 @@ export function createLiveClient(): LiveClient {
     const ok = send({
       type: 'session.commentary.append',
       delegation_id: null,
-      content: `Say exactly this line now, as yourself, nothing else: "${text.replace(/"/g, "'")}"`,
+      // Bare line only: commentary is "information the model should say aloud"; any wrapper text risks being read out.
+      content: text,
     })
     if (!ok) return Promise.resolve(false)
     return new Promise<boolean>((resolve) => {
@@ -522,10 +526,23 @@ export function createLiveClient(): LiveClient {
     }
   }
 
+  let micHeld = false
+  const applyMic = () => {
+    const on = !state.muted && !micHeld
+    try { stream?.getAudioTracks().forEach((t) => { t.enabled = on }) } catch { /* ignore */ }
+    if (started) send({ type: on ? 'session.input_audio.unmute' : 'session.input_audio.mute' })
+  }
+
   function setMuted(muted: boolean) {
     set({ muted })
-    try { stream?.getAudioTracks().forEach((t) => { t.enabled = !muted }) } catch { /* ignore */ }
-    if (started) send({ type: muted ? 'session.input_audio.mute' : 'session.input_audio.unmute' })
+    applyMic()
+  }
+
+  /** Temporarily close the mic while local TTS plays so the live model does not hear the founders through the speakers. */
+  function setMicHold(hold: boolean) {
+    if (micHeld === hold) return
+    micHeld = hold
+    applyMic()
   }
 
   return {
@@ -542,6 +559,7 @@ export function createLiveClient(): LiveClient {
     sayAsLive,
     isSpeaking: () => state.status === 'speaking',
     isChooseInFlight: () => chooseInFlight,
+    setMicHold,
     onPlayerSpeech(cb) {
       playerSpeechListeners.add(cb)
       return () => { playerSpeechListeners.delete(cb) }
