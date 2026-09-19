@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
 
 @theme {
   --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
@@ -23,3 +23,30 @@ body { font-family: var(--font-sans); overflow: hidden; -webkit-font-smoothing: 
 }
 @keyframes blink { 50% { opacity: 0 } }
 .blink { animation: blink 1s steps(1) infinite; }
+
+.world-toolbar { @apply flex flex-wrap items-start justify-between gap-3; }
+.world-location { @apply rounded-xl border border-line bg-panel/90 px-4 py-3 backdrop-blur; }
+.world-actions { @apply flex flex-wrap gap-2; }
+.world-note { @apply mt-2 w-fit max-w-full rounded-lg bg-panel/90 px-4 py-2 text-xs; }
+.world-reticle { @apply pointer-events-none absolute left-1/2 top-1/2 h-1 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white ring-2 ring-ink/50; }
+.world-help { @apply pointer-events-none absolute bottom-6 left-1/2 z-10 w-max max-w-full -translate-x-1/2 rounded-xl border border-line bg-panel/90 px-6 py-4 text-center backdrop-blur; }
+.world-touch { @apply pointer-events-auto mt-3 hidden grid-cols-3 gap-2; }
+.world-story > :not(.absolute) { max-height: 65%; overflow-y: auto; }
+
+@media (max-width: 640px) {
+  .world-location { @apply w-full px-3 py-2; }
+  .world-location p:last-child { @apply text-xs tracking-normal; }
+  .world-actions { @apply w-full; }
+  .world-actions button { @apply flex-1; }
+  .world-note { @apply hidden; }
+  .world-touch { @apply grid; }
+  .world-help { @apply bottom-3 w-full px-3 py-3; }
+  .world-story { @apply px-3 pb-3; }
+  .world-story > :not(.absolute) { max-height: calc(100% - 11rem); }
+  .world-story h2 { @apply text-xl; }
+  .world-story .grid-cols-2 { @apply grid-cols-1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blink { animation: none; }
+}

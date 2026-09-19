@@ -7,9 +7,14 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "test": "node --test firstPerson.test.ts characterAssets.test.mjs",
+    "test:browser": "node firstPerson.browser.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
+    "@react-three/postprocessing": "^3.1.1",
     "@tailwindcss/vite": "^4.3.3",
     "framer-motion": "^13.4.0",
     "howler": "^2.2.4",
@@ -17,14 +22,17 @@
     "react-dom": "^19.2.8",
     "react-sounds": "^1.0.30",
     "tailwindcss": "^4.3.3",
+    "three": "^0.186.0",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
+    "@types/three": "^0.186.0",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
+    "puppeteer-core": "^25.11.0",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
   }

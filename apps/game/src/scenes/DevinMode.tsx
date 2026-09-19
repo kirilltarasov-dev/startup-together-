@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react'
 import { makeAgent } from '../agents'
 import type { EngineeringAgent, MissionResult, MissionStatus } from '../agents/types'
 import { TERMINAL } from '../agents/types'
-import { Founders } from '../components/Founders'
 import { HUD } from '../components/HUD'
 import { BigButton } from '../components/ui'
 import { World } from '../components/World'
@@ -82,7 +81,6 @@ export function DevinMode() {
   }
 
   const waitingLine = WAITING_LINES[lineIdx]
-  const mood = result ? (result.success ? 'win' : 'lose') : 'alarm'
 
   return (
     <div className="h-full flex flex-col">
@@ -133,7 +131,6 @@ export function DevinMode() {
             </div>
 
             <div className="rounded-2xl border border-line bg-[#1A1B1E]/80 p-4">
-              <div className="scale-[0.55] origin-top -mb-24"><Founders active={waitingLine.who} mood={mood} /></div>
               {!terminal && (
                 <div className="flex gap-3 items-baseline mt-2"><span className="text-xs font-bold tracking-widest uppercase" style={{ color: FOUNDERS[waitingLine.who].color }}>{FOUNDERS[waitingLine.who].name}</span><span className="text-sm">{waitingLine.text}</span></div>
               )}

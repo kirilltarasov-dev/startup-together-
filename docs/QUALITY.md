@@ -1,6 +1,29 @@
 # Acceptance and Demo
 
-Status: **CHECKLIST ONLY. No application tests, screenshots, or builds have run.**
+Status: **Original release checklist below; first-person frontend checks have now run locally. Full release/live-integration gates remain open.**
+
+## First-Person Local Evidence (September 19, 2026)
+
+- Nine unit/asset checks pass (`npm test`): six movement, collision and grass-target tests plus three embedded Remy GLB integrity/material/budget tests.
+- TypeScript plus Vite production build passes. Large-chunk warning remains (approximately 1.47 MB JS / 418 kB gzip). The locally hosted Remy GLB is 6,074,216 bytes.
+- After Remy integration, full manual-path browser regression also passes on production preview port 5175. `scripts/character.browser.mjs` captured a seated human at gameplay and close range plus a narrow viewport, with no browser errors. Headless Brave measured 30.00 FPS / p95 33.4 ms over 120 frame intervals; interactive demo-machine FPS remains unverified. The character is in a fitted static pose, not a supplied animated seated clip.
+- Oxlint: zero errors, 14 existing warnings; the conditional-hook error in Play was fixed. No new first-person-module lint warnings remain.
+- Existing Puppeteer/headless Brave test passes against development port 5174 and production-preview port 4174. Checked 1440x900 and 390x844, nonblank scene pixels, movement-induced pixel differences, grass brushing in a center image region, grass recovery, mouse capture and Escape, all five events via the unpaid disable-feed branch, three environments, ending/restart, and emulated touch movement. Browser errors and failed local asset responses: zero.
+- Screenshots: `apps/game/node_modules/.cache/runway-first-person/` (generated, not committed).
+- This does not verify real voice, paid Devin integration, public hosting, physical mobile hardware, or the presentation laptop's sustained FPS. Human visual approval and photoreal art quality remain outstanding.
+
+QLAB audit (MCP discovery failed; package is not installed in the existing app):
+
+```text
+Layout structure:     FAIL — existing custom game shell retained; no AppShell migration
+Component compliance: FAIL — existing BigButton/HUD retained; no QLABThemeProvider
+Token compliance:     WARN — existing app palette reused; generated 3D material colors are not qlab tokens
+Motion compliance:    WARN — reduced motion supported for new world; inherited overlay durations remain
+AI elements:          N/A — no AI component migration or integration changes
+Accessibility:        WARN — keyboard, focus rings, escape and emulated touch checked; full audit not performed
+```
+
+The design-system migration was not silently attempted while its API was unavailable.
 
 ## Definition of MVP
 

@@ -1,6 +1,10 @@
 # Creative and Production Direction (FROZEN 12:40 CEST)
 
-Status: **VISUAL SPEC FROZEN. Primitives only; no asset pack today.**
+Status: **Earlier frozen spec below; first-person amendment now supersedes its camera and rendering restrictions.**
+
+## First-Person Amendment (September 19, 2026)
+
+User selected first-person and authorized the current Devin session to take over A/B while preserving uncommitted work. The active world now uses modeled rooms/courtyard, WASD/arrows, mouse capture or drag-to-look, C crouch, E/held click to brush nearby grass, F/Escape to return to story, reset-position and narrow-screen touch controls. A courtyard is part of each existing location, not another chapter. Grass uses instanced geometry with wind/contact deformation; this supersedes the earlier no-custom-shader restriction for grass only. Remy is now an imported textured human in the middle founder slot, following user approval of rigged human assets; the other founder figures and environment remain procedural/stylized. The current seated pose is locally fitted, not a supplied animation. See `ASSETS.md` for source and limitations. The five-event story and integration contracts remain unchanged. The previous fixed-camera spec is retained below for history.
 Script: [SKIT.md](SKIT.md). Voice: [VOICE.md](VOICE.md). Lanes: [HANDOFF.md](HANDOFF.md).
 
 ## The Point

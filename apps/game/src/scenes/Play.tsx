@@ -1,9 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { EventCard } from '../components/EventCard'
-import { Founders, type FounderMood } from '../components/Founders'
 import { HUD } from '../components/HUD'
-import { World } from '../components/World'
+import { World, type Mood } from '../components/World'
 import { currentEvent, resolveChoice } from '../engine/engine'
 import { DISABLE_FEED_SECOND, EVENTS, MISSION_LINES } from '../events/skit'
 import { useGame } from '../state/gameStore'
@@ -43,13 +42,12 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
     }
   }, [event?.id, g.missionOutcome]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!event) return null
-
-  const urgent = event.id === 'E04' && !g.resolved.E04
-  const mood: FounderMood = urgent ? 'alarm' : event.id === 'E04' && g.missionOutcome === 'success' ? 'win' : event.id === 'E04' && g.missionOutcome === 'failure' ? 'lose' : 'idle'
+  const urgent = event?.id === 'E04' && !g.resolved.E04
+  const mood: Mood = urgent ? 'alarm' : event?.id === 'E04' && g.missionOutcome === 'success' ? 'win' : event?.id === 'E04' && g.missionOutcome === 'failure' ? 'lose' : 'idle'
 
   /** Single entry point for buttons AND voice (via App → connectVoiceBridge). */
   const choose = (c: Choice, constraint?: string) => {
+    if (!event) return
     if (c.engineeringMission) {
       if (g.resolved[event.id]) return
       g.markResolved(event.id, c.id)
@@ -69,10 +67,12 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
   // voice → same path as a button
   useEffect(() => {
     const vr = run.voiceRequest
-    if (!vr || vr.eventId !== event.id) return
+    if (!event || !vr || vr.eventId !== event.id) return
     const c = event.choices.find((x) => x.id === vr.choiceId)
     if (c) choose(c, vr.constraint)
   }, [run.voiceRequest?.n]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!event) return null
 
   const next = () => {
     const idx = g.eventIndex
@@ -94,8 +94,7 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
   return (
     <div className="h-full flex flex-col">
       <HUD />
-      <World scene={g.scene} mood={mood} shake={shake}>
-        <Founders active={speaker} mood={mood} />
+      <World key={g.scene} scene={g.scene} mood={mood} active={speaker} shake={shake}>
         <AnimatePresence mode="wait">
           {door ? (
             <motion.div key="door" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-4xl rounded-2xl border border-gold/60 bg-[#1A1B1E]/95 p-6 flex items-center justify-between">

@@ -85,3 +85,11 @@ Do not imply autonomous monitoring or work between user turns.
 - Test the deployed URL as a signed-out visitor before calling it delivered.
 - Freeze features for the last 30 minutes; fix blockers, rehearse, and submit.
 - Report missing tests or unavailable infrastructure honestly.
+
+## First-Person Frontend Verification
+
+- From `apps/game`, `npm test` runs movement/collision/grass-target tests and embedded Remy GLB integrity/material tests using Node's native TypeScript stripping (Node 22.18+).
+- `npm run test:browser` uses the existing Puppeteer dependency with a disposable browser profile. Set `BROWSER_PATH` to a Chromium-family executable on other machines; the local default is Brave on macOS.
+- Start Vite on port 5174, or set `TEST_URL` to the running development/production-preview URL. The browser test takes only the manual disable-feed path; it never starts a paid mission.
+- Screenshots are generated under `apps/game/node_modules/.cache/runway-first-person/` and remain untracked. Tests check rendered pixel changes, grass release, pointer-lock exit, story completion/restart, and emulated touch movement.
+- The first-person environment uses local code-generated geometry and textures. `World3D.tsx` is preserved legacy work and is not the active renderer.

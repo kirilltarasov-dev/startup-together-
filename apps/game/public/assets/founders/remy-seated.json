@@ -1,0 +1,20 @@
+{
+  "source": "Remy.fbx",
+  "sourceSha256": "ea53dc7a94cde370ede41484be58d41a2e7278e13324a390d160232a5421493d",
+  "sourceActions": [
+    [
+      "Armature|mixamo.com|Layer0",
+      [
+        1.0,
+        2.0
+      ]
+    ]
+  ],
+  "pose": "Locally fitted static seated pose; not a supplied seated animation",
+  "bones": 67,
+  "meshes": 7,
+  "vertices": 19404,
+  "maxTextureDimension": 1024,
+  "outputBytes": 6074216,
+  "outputSha256": "bbce7b37aaeb9b36b30b1fc43f705e9744a19a76dfcef2e8d321c7b3916f39e2"
+}

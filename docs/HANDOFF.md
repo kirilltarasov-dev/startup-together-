@@ -3,6 +3,10 @@
 Production owner/checklist: [COORDINATOR.md](COORDINATOR.md).
 Playable script draft: [SKIT.md](SKIT.md).
 
+## Latest Frontend Amendment (September 19, 2026)
+
+The user requested a realistic, touchable 3D environment, selected first-person over third-person/diorama, and explicitly authorized the current Devin session to take over frontend/3D while preserving existing uncommitted work. This supersedes the earlier fixed-camera/panorama and primitives-only constraints for the visual/input upgrade. The implemented local build has modeled three-scene environments and a connected courtyard, WASD/mouse or drag-to-look, crouching, reactive grass, and story-overlay return. The five-event story and backend/voice ownership remain unchanged. The user-supplied Remy model now replaces the middle founder with a textured, rigged human in a locally fitted static seated pose. Sadman, Sergio, the hand and environment remain procedural; no photoreal scene or motion-capture idle is claimed. Verification commands are in `AGENTS.md`; asset provenance, measurements and remaining animation/character gaps are in `ASSETS.md`.
+
 User update recorded September 19, 2026, 12:35 CEST (supersedes 11:59 entries below where they conflict).
 
 ## 12:35 Freeze (latest user approval)

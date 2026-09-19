@@ -1,43 +1,83 @@
-import { motion } from 'framer-motion'
-import type { SceneId } from '../state/types'
+import { motion, useReducedMotion } from 'framer-motion'
+import { useRef, useState } from 'react'
+import type { FounderId, SceneId } from '../state/types'
+import { FirstPersonWorld, type FirstPersonHandle } from '../scenes/FirstPersonWorld'
+import { ErrorBoundary } from './ErrorBoundary'
+import { BigButton } from './ui'
 
 export type Mood = 'idle' | 'alarm' | 'win' | 'lose' | 'devin'
 
-/**
- * Scene backdrop. Uses generated art from /assets/scenes/<id>.jpg when present (see docs/ASSETS.md),
- * falling back to a gradient so the game never looks broken.
- */
-const SCENES: Record<SceneId | 'devin', { img: string; fallback: string; sign: string }> = {
-  S1: { img: '/assets/scenes/s1-puzl-budapest.jpg', fallback: 'from-[#2a1d16] via-[#15100d] to-[#0a0a0f]', sign: 'PUZL COWORKING · OBUDA · COGNITION × DEVIN HACKATHON' },
-  S2: { img: '/assets/scenes/s2-debrecen-apartment.jpg', fallback: 'from-[#14201a] via-[#0d1410] to-[#0a0a0f]', sign: 'DEBRECEN · 2-ROOM APARTMENT' },
-  S3: { img: '/assets/scenes/s3-investor-room.jpg', fallback: 'from-[#1a1d2a] via-[#0f1119] to-[#0a0a0f]', sign: 'ACCELERATOR · INVESTOR ROOM' },
-  devin: { img: '/assets/scenes/devin-mission-control.jpg', fallback: 'from-[#0b1030] via-[#080a1a] to-[#0a0a0f]', sign: 'MISSION CONTROL' },
+const SIGN: Record<SceneId | 'devin', string> = {
+  S1: 'PUZL COWORKING · OBUDA · COGNITION × DEVIN HACKATHON',
+  S2: 'DEBRECEN · 2-ROOM APARTMENT',
+  S3: 'ACCELERATOR · INVESTOR ROOM',
+  devin: 'MISSION CONTROL',
 }
 
 const TINT: Record<Mood, string> = {
-  idle: 'rgba(255,179,92,0.10)',
-  alarm: 'rgba(255,90,95,0.32)',
-  win: 'rgba(45,212,191,0.22)',
-  lose: 'rgba(20,20,28,0.55)',
-  devin: 'rgba(124,156,255,0.18)',
+  idle: 'rgba(0,0,0,0)',
+  alarm: 'rgba(255,90,95,0.18)',
+  win: 'rgba(45,212,191,0.12)',
+  lose: 'rgba(10,10,15,0.45)',
+  devin: 'rgba(124,156,255,0.08)',
 }
 
-export function World({ scene, mood = 'idle', shake, children }: { scene: SceneId | 'devin'; mood?: Mood; shake?: boolean; children?: React.ReactNode }) {
-  const p = SCENES[scene]
+/** 3D world (R3F) + DOM overlay. Children render on top of the canvas. */
+export function World({ scene, mood = 'idle', active, shake, children }: { scene: SceneId | 'devin'; mood?: Mood; active?: FounderId; shake?: boolean; children?: React.ReactNode }) {
+  const controls = useRef<FirstPersonHandle | null>(null)
+  const hint = useRef<HTMLOutputElement | null>(null)
+  const [exploring, setExploring] = useState(false)
+  const [controlError, setControlError] = useState('')
+  const reducedMotion = !!useReducedMotion()
+  const canExplore = scene !== 'devin'
+  const controlClass = '!px-4 !py-2 !text-xs !tracking-normal !bg-panel !text-mint border border-line focus-visible:ring-2 focus-visible:ring-mint'
+
   return (
-    <motion.div
-      key={scene}
-      initial={{ opacity: 0, scale: 1.04, x: 40 }}
-      animate={shake ? { opacity: 1, scale: 1, x: [0, -8, 8, -5, 5, 0] } : { opacity: 1, scale: 1, x: 0 }}
-      transition={shake ? { duration: 0.5 } : { duration: 0.9, ease: 'easeOut' }}
-      className={`relative flex-1 overflow-hidden bg-gradient-to-b ${p.fallback}`}
-    >
-      <img src={p.img} alt="" className="absolute inset-0 w-full h-full object-cover" onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')} />
+    <div className="relative h-full flex-1 min-h-0 overflow-hidden bg-ink" data-exploring={exploring}>
+      <ErrorBoundary key={scene} label="FirstPersonWorld" fallback={<section className="absolute inset-0 bg-panel p-8"><p role="alert">The 3D world could not start. Your story is still playable below. Reload to retry graphics.</p></section>}>
+        <FirstPersonWorld scene={scene} mood={mood} active={active} controlsRef={controls} hintRef={hint} onExploreChange={setExploring} onControlError={setControlError} reducedMotion={reducedMotion} />
+      </ErrorBoundary>
       <motion.div className="absolute inset-0 pointer-events-none" animate={{ background: TINT[mood] }} transition={{ duration: 0.6 }} />
-      {mood === 'alarm' && <motion.div className="absolute inset-0 pointer-events-none bg-[#FF5A5F]/25" animate={{ opacity: [0.1, 0.5, 0.1] }} transition={{ repeat: Infinity, duration: 1 }} />}
-      <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[#0a0a0f] via-[#0a0a0f]/60 to-transparent pointer-events-none" />
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 text-[10px] tracking-[0.4em] uppercase opacity-50">{p.sign}</div>
-      <div className="relative h-full flex flex-col items-center justify-end pb-6 gap-6 px-6">{children}</div>
-    </motion.div>
+      {mood === 'alarm' && <motion.div className="absolute inset-0 pointer-events-none bg-[#FF5A5F]/20" animate={{ opacity: reducedMotion ? 0.1 : [0.1, 0.3, 0.1] }} transition={{ repeat: Infinity, duration: 1 }} />}
+      <div className={`absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-ink to-transparent pointer-events-none ${exploring ? 'invisible' : ''}`} />
+      {canExplore && <aside className="absolute top-4 left-4 right-4 z-10 pointer-events-none" aria-label="World controls">
+        <header className="world-toolbar">
+          <section className="world-location">
+            <p className="text-mint text-xs uppercase tracking-widest">RUNWAY / FIRST PERSON</p>
+            <p className="text-xs mt-1">{SIGN[scene]}</p>
+          </section>
+          <nav className="world-actions pointer-events-auto" aria-label="Exploration">
+            {exploring ? <>
+              <BigButton className={controlClass} onClick={() => controls.current?.reset()}>RESET POSITION</BigButton>
+              <BigButton className={controlClass} onClick={() => controls.current?.exit()}>BACK TO STORY · F / ESC</BigButton>
+            </> : <>
+              <BigButton className={controlClass} onClick={() => controls.current?.enter()}>EXPLORE IN FIRST PERSON</BigButton>
+              <BigButton className={controlClass} onClick={() => controls.current?.enter(false)}>DRAG-TO-LOOK MODE</BigButton>
+            </>}
+          </nav>
+        </header>
+        {controlError && <p role="alert" className="world-note pointer-events-auto">{controlError}</p>}
+        {!exploring && <p className="world-note">A real place to take a break. Walk outside, look down, brush the grass.</p>}
+      </aside>}
+      {exploring && <>
+        <span className="world-reticle" aria-hidden="true" />
+        <aside className="world-help" aria-label="First-person instructions">
+          <output ref={hint} className="block text-mint text-sm" aria-live="off">Step off the path, look down, hold E.</output>
+          <p className="text-xs mt-2">WASD / arrows · mouse or drag to look · C crouch · hold E to touch · F / Esc story</p>
+          <nav className="world-touch" aria-label="Touch movement controls">
+            {([['KeyW', 'Forward'], ['KeyA', 'Left'], ['KeyS', 'Back'], ['KeyD', 'Right'], ['KeyC', 'Crouch'], ['KeyE', 'Touch grass']] as const).map(([key, label]) => <BigButton
+              key={key}
+              className={controlClass}
+              aria-label={label}
+              onPointerDown={(event) => { event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); controls.current?.press(key, true) }}
+              onPointerUp={() => controls.current?.press(key, false)}
+              onPointerCancel={() => controls.current?.press(key, false)}
+              onLostPointerCapture={() => controls.current?.press(key, false)}
+            >{label}</BigButton>)}
+          </nav>
+        </aside>
+      </>}
+      <div inert={exploring} aria-hidden={exploring} className={`${canExplore ? 'world-story' : ''} relative h-full flex flex-col items-center justify-end pb-6 gap-6 px-6 pointer-events-none [&>*]:pointer-events-auto ${exploring ? 'invisible' : ''}`} data-incident={shake || undefined}>{children}</div>
+    </div>
   )
 }
