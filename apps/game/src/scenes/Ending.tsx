@@ -5,6 +5,7 @@ import { ending } from '../engine/engine'
 import { ENDING_LINES } from '../events/skit'
 import { FOUNDERS, useGame } from '../state/gameStore'
 import { useRun } from '../state/runStore'
+import { getLiveClient } from '../voice'
 
 const MODE_LABEL = { live: 'LIVE', cached: 'CACHED REAL RUN', mock: 'MOCK' }
 
@@ -20,7 +21,7 @@ export function Ending() {
   const line = win ? ENDING_LINES.win : ENDING_LINES.lose
   const ev = g.missionEvidence
 
-  const restart = () => { run.clearMission(); g.restart() }
+  const restart = () => { getLiveClient().disconnect(); run.clearMission(); g.restart() }
 
   return (
     <World scene="S3" mood={win ? 'win' : 'lose'}>

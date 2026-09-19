@@ -6,7 +6,9 @@
 import {
   dispatchVoiceChoice,
   getVoiceContext,
+  subscribeSpeak,
   subscribeVoiceContext,
+  type SpeakPayload,
   type VoiceContext,
 } from '../state/voiceBridge'
 
@@ -43,6 +45,11 @@ const IDLE_NULL_CTX_MS = 10 * 60 * 1000
 const ICE_GATHER_TIMEOUT_MS = 1000
 /** UI indicator only: how long after the last transcript delta we keep showing "speaking". Not audio speed. */
 const SPEAKING_SETTLE_MS = 1200
+/** Max chars of scripted-line commentary per append (keep the tail). */
+const SPEAK_CAP_CHARS = 1800
+/** Safety: if a delegation never yields a choose call, stop holding scripted lines after this long. */
+const CHOOSE_INFLIGHT_MAX_MS = 20_000
+const SPEAK_PREFIX = 'SCRIPTED LINES. Perform aloud, one persona per line, in character:\n'
 
 let eventCounter = 0
 const nextEventId = () => `evt_${Date.now().toString(36)}_${(++eventCounter).toString(36)}`
@@ -98,10 +105,21 @@ export function createLiveClient(): LiveClient {
   let lastPushedText: string | null = null
   /** Events already resolved by a choose call; repeat calls are acknowledged but not dispatched. */
   const resolvedEvents = new Set<string>()
-  // Latency probes (console only). Separate: cold connect, speech->first reply, choice->action.
+  // Latency probes (console only). Separate: cold connect, speech->first reply, delegation->choose, choose->dispatch.
   let tConnectStart = 0
   let tLastHeard = 0
   let tFirstReplyAfterHeard = 0
+  /** performance.now() when session.delegation.created arrived, by delegation id. */
+  const delegationStart = new Map<string, number>()
+  // Scripted lines (voiceBridge.speakLines) -> session.commentary.append.
+  let unsubSpeak: (() => void) | null = null
+  const spokenTags = new Set<string>()
+  /** Before session.started: only the most recent payload is kept. */
+  let pendingSpeak: SpeakPayload | null = null
+  /** While a choose is in flight: queued payloads, flushed after the tool result's response.create. */
+  const speakQueue: SpeakPayload[] = []
+  let chooseInFlight = false
+  let inflightTimer: ReturnType<typeof setTimeout> | null = null
 
   const set = (patch: Partial<VoiceState>) => {
     state = { ...state, ...patch }
@@ -157,6 +175,44 @@ export function createLiveClient(): LiveClient {
     pushContext(ctx)
   }
 
+  /** Keep the last lines that fit under the cap (never cut a line in half). */
+  const capLines = (text: string): string => {
+    if (text.length <= SPEAK_CAP_CHARS) return text
+    const lines = text.split('\n')
+    const kept: string[] = []
+    let len = 0
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const add = lines[i].length + (kept.length ? 1 : 0)
+      if (len + add > SPEAK_CAP_CHARS) break
+      kept.unshift(lines[i]); len += add
+    }
+    return kept.length ? kept.join('\n') : text.slice(-SPEAK_CAP_CHARS)
+  }
+
+  const sendSpeak = (p: SpeakPayload) => {
+    if (spokenTags.has(p.tag)) return
+    spokenTags.add(p.tag)
+    send({ type: 'session.commentary.append', delegation_id: null, content: SPEAK_PREFIX + capLines(p.text) })
+  }
+
+  const flushSpeakQueue = () => {
+    while (speakQueue.length) sendSpeak(speakQueue.shift()!)
+  }
+
+  const setChooseInFlight = (on: boolean) => {
+    chooseInFlight = on
+    if (inflightTimer) { clearTimeout(inflightTimer); inflightTimer = null }
+    if (on) inflightTimer = setTimeout(() => { if (chooseInFlight) { chooseInFlight = false; flushSpeakQueue() } }, CHOOSE_INFLIGHT_MAX_MS)
+    else flushSpeakQueue()
+  }
+
+  const onSpeak = (p: SpeakPayload) => {
+    if (!started) { pendingSpeak = p; return }
+    if (spokenTags.has(p.tag)) return
+    if (chooseInFlight) { speakQueue.push(p); return }
+    sendSpeak(p)
+  }
+
   const markSpeaking = () => {
     if (!active()) return
     if (state.status !== 'speaking') set({ status: 'speaking' })
@@ -164,8 +220,12 @@ export function createLiveClient(): LiveClient {
     speakTimer = setTimeout(() => { if (state.status === 'speaking') set({ status: 'listening' }) }, SPEAKING_SETTLE_MS)
   }
 
-  const handleToolCall = (item: { call_id?: string; arguments?: string }) => {
+  const handleToolCall = (item: { call_id?: string; arguments?: string }, delegationId?: string) => {
     const t0 = performance.now()
+    if (delegationId && delegationStart.has(delegationId)) {
+      console.info('[voice:metrics] delegation->choose ms', Math.round(t0 - delegationStart.get(delegationId)!), { delegationId })
+      delegationStart.delete(delegationId)
+    }
     let ok = false
     let output = 'rejected: illegal or stale choice'
     let eventId = ''
@@ -182,7 +242,7 @@ export function createLiveClient(): LiveClient {
     } catch (e) {
       console.warn('[voice] bad choose arguments', item.arguments, e)
     }
-    console.info('[voice:metrics] choice->action ms', Math.round(performance.now() - t0), { eventId, ok })
+    console.info('[voice:metrics] choose->dispatch ms', Math.round(performance.now() - t0), { eventId, ok })
     set({ caption: '' })
     send({
       type: 'response.item.create',
@@ -192,6 +252,8 @@ export function createLiveClient(): LiveClient {
     // (whole delegation object resent), then continue so the voice can react.
     if (lastPushedText) sendDelegation(lastPushedText, 'none')
     send({ type: 'response.create' })
+    // Choose is no longer in flight: release any scripted lines held back meanwhile.
+    setChooseInFlight(false)
   }
 
   const onMessage = (raw: string) => {
@@ -210,6 +272,14 @@ export function createLiveClient(): LiveClient {
         set({ status: 'listening', reason: undefined })
         const ctx = getVoiceContext()
         if (ctx) { lastCtxId = ctx.eventId; pushContext(ctx) }
+        if (pendingSpeak) { const p = pendingSpeak; pendingSpeak = null; onSpeak(p) }
+        return
+      }
+      case 'session.delegation.created': {
+        const d = msg.delegation as { id?: string } | undefined
+        const id = typeof d?.id === 'string' ? d.id : typeof msg.delegation_id === 'string' ? msg.delegation_id : typeof msg.id === 'string' ? msg.id : ''
+        if (id) delegationStart.set(id, performance.now())
+        setChooseInFlight(true)
         return
       }
       case 'session.output_transcript.delta': {
@@ -232,7 +302,9 @@ export function createLiveClient(): LiveClient {
         const ev = (msg.event ?? {}) as Record<string, unknown>
         if (ev.type === 'response.output_item.done') {
           const item = ev.item as { type?: string; name?: string; call_id?: string; arguments?: string } | undefined
-          if (item?.type === 'function_call' && item.name === 'choose') handleToolCall(item)
+          if (item?.type === 'function_call' && item.name === 'choose') {
+            handleToolCall(item, typeof msg.delegation_id === 'string' ? msg.delegation_id : undefined)
+          }
         }
         return
       }
@@ -259,6 +331,13 @@ export function createLiveClient(): LiveClient {
     if (nullCtxTimer) { clearTimeout(nullCtxTimer); nullCtxTimer = null }
     if (speakTimer) { clearTimeout(speakTimer); speakTimer = null }
     if (unsubCtx) { unsubCtx(); unsubCtx = null }
+    if (unsubSpeak) { unsubSpeak(); unsubSpeak = null }
+    if (inflightTimer) { clearTimeout(inflightTimer); inflightTimer = null }
+    chooseInFlight = false
+    pendingSpeak = null
+    speakQueue.length = 0
+    spokenTags.clear()
+    delegationStart.clear()
     try { stream?.getTracks().forEach((t) => t.stop()) } catch { /* ignore */ }
     try { dc?.close() } catch { /* ignore */ }
     try { pc?.close() } catch { /* ignore */ }
@@ -353,6 +432,7 @@ export function createLiveClient(): LiveClient {
       if (pc !== localPc) return
 
       unsubCtx = subscribeVoiceContext(onCtx)
+      unsubSpeak = subscribeSpeak(onSpeak) // replays the latest scripted lines; buffered until session.started
       capTimer = setTimeout(() => { if (active()) disconnect('10 minute cap') }, SESSION_CAP_MS)
       // status becomes 'listening' on session.started
     } catch (e) {
