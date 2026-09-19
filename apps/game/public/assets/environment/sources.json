@@ -7,56 +7,77 @@
       "asset": "brick_wall_02",
       "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brick_wall_02/brick_wall_02_diff_1k.jpg",
       "license": "CC0-1.0",
-      "bytes": 1032279,
-      "sha256": "e80aad85ff49b70af5e554d28adf1009adca409fe5d89c2647595254f972df9c"
+      "bytes": 294432,
+      "sha256": "6757ce6af2804d91900ab97c87e3ca17ba623db50452a8d8be3a645785e90f0d",
+      "sourceBytes": 1032279,
+      "sourceSha256": "e80aad85ff49b70af5e554d28adf1009adca409fe5d89c2647595254f972df9c",
+      "modification": "Re-encoded JPEG quality 82, chroma 4:2:0, 1024x1024 unchanged (scripts/shrink-environment-textures.py, September 19, 2026)"
     },
     {
       "file": "public/assets/environment/brick-normal.jpg",
       "asset": "brick_wall_02",
       "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brick_wall_02/brick_wall_02_nor_gl_1k.jpg",
       "license": "CC0-1.0",
-      "bytes": 1121130,
-      "sha256": "ee1d7b11786a6c26245c02d6041aef0cda03431fc06a7509111575ce12bf422c"
+      "bytes": 484599,
+      "sha256": "9a1e5de312d5b32452e8ba6154e16cfdbe254767340c422f87a2eed9a87e2eff",
+      "sourceBytes": 1121130,
+      "sourceSha256": "ee1d7b11786a6c26245c02d6041aef0cda03431fc06a7509111575ce12bf422c",
+      "modification": "Re-encoded JPEG quality 88, chroma 4:4:4, 1024x1024 unchanged (scripts/shrink-environment-textures.py, September 19, 2026)"
     },
     {
       "file": "public/assets/environment/brick-roughness.jpg",
       "asset": "brick_wall_02",
       "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brick_wall_02/brick_wall_02_rough_1k.jpg",
       "license": "CC0-1.0",
-      "bytes": 391526,
-      "sha256": "0567ea80ad98578f7160ed7880352b3b84d877afe8abbb538c1bb02586aa6e64"
+      "bytes": 57558,
+      "sha256": "1bdfd1f4004f0f24a20a6528262152e49f66a509b126a96e7efbc75ab09728ae",
+      "sourceBytes": 391526,
+      "sourceSha256": "0567ea80ad98578f7160ed7880352b3b84d877afe8abbb538c1bb02586aa6e64",
+      "modification": "Re-encoded JPEG quality 80, chroma 4:2:0, 1024x1024 unchanged (scripts/shrink-environment-textures.py, September 19, 2026)"
     },
     {
       "file": "public/assets/environment/concrete-color.jpg",
       "asset": "concrete_pavement",
       "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_pavement/concrete_pavement_diff_1k.jpg",
       "license": "CC0-1.0",
-      "bytes": 926197,
-      "sha256": "70d3ff969a7421c7ae057b5d16386d11f5e59c6740db643352e1039413f419c4"
+      "bytes": 235271,
+      "sha256": "76a6d7c910e4e97c5e9eed48e5b07127d2664b32481918fe707306897560fd76",
+      "sourceBytes": 926197,
+      "sourceSha256": "70d3ff969a7421c7ae057b5d16386d11f5e59c6740db643352e1039413f419c4",
+      "modification": "Re-encoded JPEG quality 82, chroma 4:2:0, 1024x1024 unchanged (scripts/shrink-environment-textures.py, September 19, 2026)"
     },
     {
       "file": "public/assets/environment/concrete-normal.jpg",
       "asset": "concrete_pavement",
       "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_pavement/concrete_pavement_nor_gl_1k.jpg",
       "license": "CC0-1.0",
-      "bytes": 1184345,
-      "sha256": "a5009e409ff0f7b2d19e1316fe5e2b2b4f28e4a6b79990a664be69d4e8a0e690"
+      "bytes": 514333,
+      "sha256": "e800273f0c715ce8eb779539f2839af11f407e647844304216d92d151371c0bd",
+      "sourceBytes": 1184345,
+      "sourceSha256": "a5009e409ff0f7b2d19e1316fe5e2b2b4f28e4a6b79990a664be69d4e8a0e690",
+      "modification": "Re-encoded JPEG quality 88, chroma 4:4:4, 1024x1024 unchanged (scripts/shrink-environment-textures.py, September 19, 2026)"
     },
     {
       "file": "public/assets/environment/concrete-roughness.jpg",
       "asset": "concrete_pavement",
       "source": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/concrete_pavement/concrete_pavement_rough_1k.jpg",
       "license": "CC0-1.0",
-      "bytes": 475799,
-      "sha256": "99f81099af07b009134b6a81bf0f95ab16da09c57156cc2ed534975664a68533"
+      "bytes": 65774,
+      "sha256": "9e68f14576f692f196857537aa97f256589b4b18d24fee5e565e1e09bce27bde",
+      "sourceBytes": 475799,
+      "sourceSha256": "99f81099af07b009134b6a81bf0f95ab16da09c57156cc2ed534975664a68533",
+      "modification": "Re-encoded JPEG quality 80, chroma 4:2:0, 1024x1024 unchanged (scripts/shrink-environment-textures.py, September 19, 2026)"
     },
     {
       "file": "public/assets/environment/courtyard.hdr",
       "asset": "urban_courtyard",
       "source": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/urban_courtyard_1k.hdr",
       "license": "CC0-1.0",
-      "bytes": 1651460,
-      "sha256": "3b6f830575bde91b549e854be39fdefe635787d0477d2a1fc3039fb1e60ba1c7"
+      "bytes": 422604,
+      "sha256": "338da12b15f1cb76675c59f8263684b50cf7fe0f1349833f09d17e526d3389a4",
+      "sourceBytes": 1651460,
+      "sourceSha256": "3b6f830575bde91b549e854be39fdefe635787d0477d2a1fc3039fb1e60ba1c7",
+      "modification": "Downsampled 2x to 512x256 RGBE RLE, lighting/reflections only (scripts/shrink-environment-assets.mjs, September 19, 2026)"
     },
     {
       "file": "node_modules/.cache/runway-environment-source/tree.blend",
@@ -146,5 +167,6 @@
       "bytes": 978557,
       "sha256": "1ed5ad24397c065beb2b2d3521470730f24e957cbd5fb323ad3f9b6d267b4585"
     }
-  ]
+  ],
+  "note": "sourceBytes/sourceSha256 are the verified Poly Haven downloads; bytes/sha256 are the served, re-encoded files. Sources remain in the ignored node_modules/.cache/runway-environment-source/ directory."
 }
