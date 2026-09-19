@@ -8,6 +8,7 @@ import { Play } from './scenes/Play'
 import { Result } from './scenes/Result'
 import { useGame } from './state/gameStore'
 import { useRun } from './state/runStore'
+import { VoiceButton } from './voice'
 
 export default function App() {
   const screen = useGame((s) => s.screen)
@@ -25,7 +26,7 @@ export default function App() {
       <AnimatePresence mode="wait">
         <motion.div key={screen} className="h-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }}>
           {screen === 'opening' && <Opening />}
-          {screen === 'play' && <Play />}
+          {screen === 'play' && <Play voiceSlot={<VoiceButton />} />}
           {screen === 'result' && <Result />}
           {screen === 'devin' && <DevinMode />}
           {screen === 'ending' && <Ending />}
