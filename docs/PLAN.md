@@ -1,5 +1,9 @@
 # Delivery Plan
 
+## Camera View Choice (September 19, 2026)
+
+Current integration session claims `components/World.tsx`, `world/ImmersiveWorld.tsx`, `scripts/third-person.browser.mjs` and this record. Status: REVIEW. User requested first-person alongside third-person after the merge and explicitly requested immediate push. Added toolbar switches using the existing first-person renderer; selection is retained in the URL without reloading the page. Switching resets exploration position. Production build, 26 logic/asset tests and focused source lint pass. Desktop/narrow browser regression has been extended; initial run clicked before the first-person controller loaded, and the rerun waits for assets. Full browser verification and live deployment verification are pending at publication.
+
 ## Third Founder FBX (September 19, 2026, 15:07 CEST)
 
 | ID | Owner | Claimed files | Status | Acceptance |

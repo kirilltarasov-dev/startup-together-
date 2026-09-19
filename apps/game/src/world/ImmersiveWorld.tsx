@@ -9,7 +9,7 @@ import type { Mood } from '../components/World'
 import type { PlayerActions } from '../characters/CharacterController'
 import { CHARACTERS, type CharacterId } from '../characters/CharacterCustomization'
 
-export function ImmersiveWorld({ scene, mood = 'idle', active, children }: { scene: SceneId | 'devin'; mood?: Mood; active?: FounderId; children?: ReactNode }) {
+export function ImmersiveWorld({ scene, mood = 'idle', active, children, onSwitchView }: { scene: SceneId | 'devin'; mood?: Mood; active?: FounderId; children?: ReactNode; onSwitchView: () => void }) {
   const screen = useGame((state) => state.screen)
   const forced = screen === 'ending' || screen === 'result' || scene === 'devin'
   const [story, setStory] = useState(false)
@@ -32,12 +32,13 @@ export function ImmersiveWorld({ scene, mood = 'idle', active, children }: { sce
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('blur', blur); window.removeEventListener('focus', focus) }
   }, [forced])
   return <section className="relative h-full min-h-0 flex-1 overflow-hidden bg-ink" aria-label="Third-person world" data-world="third-person" data-story-open={forced || story}>
-    <ErrorBoundary label="Third-person world" fallback={<section className="absolute inset-0 bg-panel p-8"><p role="alert">The third-person world could not load.</p><a className="text-mint underline" href="?world=legacy">Open the previous renderer</a><BigButton onClick={() => setStory(true)}>KEEP PLAYING THE STORY</BigButton></section>}>
+    <ErrorBoundary label="Third-person world" fallback={<section className="absolute inset-0 bg-panel p-8"><p role="alert">The third-person world could not load.</p><BigButton onClick={onSwitchView}>FIRST-PERSON VIEW</BigButton><BigButton onClick={() => setStory(true)}>KEEP PLAYING THE STORY</BigButton></section>}>
       <ThirdPersonWorld scene={scene} mood={mood} active={active} selected={selected} actionsRef={controls} paused={paused} reducedMotion={reduced} />
     </ErrorBoundary>
     {!forced && <header className="absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-between gap-2 pointer-events-none">
       <section className="rounded-xl bg-panel/90 p-3"><img src="/assets/branding/cognition-light.png" alt="Cognition" className="h-5 w-auto" /><p className="mt-2 text-xs text-mint">RUNWAY · THIRD PERSON</p></section>
       <nav className="flex flex-wrap gap-2 pointer-events-auto" aria-label="Third-person controls">
+        <BigButton className={button} onClick={onSwitchView}>FIRST-PERSON VIEW</BigButton>
         <label className="rounded border border-line bg-panel p-2 text-xs">Character <select aria-label="Character appearance" value={selected} onChange={(event) => setSelected(event.target.value as CharacterId)} className="bg-panel text-mint">{CHARACTERS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <BigButton className={button} onClick={() => controls.current?.reset()}>RESET POSITION</BigButton>
         <BigButton className={button} onClick={() => setStory((open) => !open)}>{story ? 'BACK TO WORLD' : 'TALK TO FOUNDERS · F'}</BigButton>

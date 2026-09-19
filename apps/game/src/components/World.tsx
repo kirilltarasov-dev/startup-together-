@@ -24,7 +24,7 @@ const TINT: Record<Mood, string> = {
 }
 
 /** 3D world (R3F) + DOM overlay. Children render on top of the canvas. */
-function LegacyWorld({ scene, mood = 'idle', active, shake, children }: { scene: SceneId | 'devin'; mood?: Mood; active?: FounderId; shake?: boolean; children?: React.ReactNode }) {
+function LegacyWorld({ scene, mood = 'idle', active, shake, children, onSwitchView }: { scene: SceneId | 'devin'; mood?: Mood; active?: FounderId; shake?: boolean; children?: React.ReactNode; onSwitchView: () => void }) {
   const controls = useRef<FirstPersonHandle | null>(null)
   const hint = useRef<HTMLOutputElement | null>(null)
   const [exploring, setExploring] = useState(false)
@@ -34,7 +34,7 @@ function LegacyWorld({ scene, mood = 'idle', active, shake, children }: { scene:
   const controlClass = '!px-4 !py-2 !text-xs !tracking-normal !bg-panel !text-mint border border-line focus-visible:ring-2 focus-visible:ring-mint'
 
   return (
-    <div className="relative h-full flex-1 min-h-0 overflow-hidden bg-ink" data-exploring={exploring}>
+    <div className="relative h-full flex-1 min-h-0 overflow-hidden bg-ink" data-world="first-person" data-exploring={exploring}>
       <ErrorBoundary key={scene} label="FirstPersonWorld" fallback={<section className="absolute inset-0 bg-panel p-8"><p role="alert">The 3D world could not start. Your story is still playable below. Reload to retry graphics.</p></section>}>
         <FirstPersonWorld scene={scene} mood={mood} active={active} controlsRef={controls} hintRef={hint} onExploreChange={setExploring} onControlError={setControlError} reducedMotion={reducedMotion} />
       </ErrorBoundary>
@@ -48,6 +48,7 @@ function LegacyWorld({ scene, mood = 'idle', active, shake, children }: { scene:
             <p className="text-xs mt-1">{SIGN[scene]}</p>
           </section>
           <nav className="world-actions pointer-events-auto" aria-label="Exploration">
+            <BigButton className={controlClass} onClick={() => { controls.current?.exit(); onSwitchView() }}>THIRD-PERSON VIEW</BigButton>
             {exploring ? <>
               <BigButton className={controlClass} onClick={() => controls.current?.reset()}>RESET POSITION</BigButton>
               <BigButton className={controlClass} onClick={() => controls.current?.exit()}>BACK TO STORY · F / ESC</BigButton>
@@ -84,5 +85,13 @@ function LegacyWorld({ scene, mood = 'idle', active, shake, children }: { scene:
 }
 
 export function World(props: { scene: SceneId | 'devin'; mood?: Mood; active?: FounderId; shake?: boolean; children?: React.ReactNode }) {
-  return new URLSearchParams(window.location.search).get('world') === 'legacy' ? <LegacyWorld {...props} /> : <Suspense fallback={<section className="h-full bg-panel p-8 text-mint">Loading third-person world…</section>}><ImmersiveWorld {...props} /></Suspense>
+  const [firstPerson, setFirstPerson] = useState(() => ['legacy', 'first-person'].includes(new URLSearchParams(window.location.search).get('world') ?? ''))
+  const switchView = () => {
+    const next = !firstPerson
+    const url = new URL(window.location.href)
+    url.searchParams.set('world', next ? 'first-person' : 'third-person')
+    window.history.replaceState(window.history.state, '', url)
+    setFirstPerson(next)
+  }
+  return firstPerson ? <LegacyWorld {...props} onSwitchView={switchView} /> : <Suspense fallback={<section className="h-full bg-panel p-8 text-mint">Loading third-person world…</section>}><ImmersiveWorld {...props} onSwitchView={switchView} /></Suspense>
 }
