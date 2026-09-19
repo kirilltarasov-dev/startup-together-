@@ -20,13 +20,13 @@ CONTEXT
   `OPENAI_API_KEY` for gpt-live-1 voice sessions. Railway = FastAPI orchestrator container that
   holds `DEVIN_API_KEY` and serves `/api/missions`. Secrets stay server-side on each platform.
 
-TASK 1 - Throwaway challenge repo (10 min)
-1. Clone the main repo. Create a NEW private GitHub repo named `runway-startup-repo` under our org/user.
-2. Copy ONLY the contents of `startup-repo/` into it (backend/, tests/, benchmark/, requirements.txt,
-   README.md, .gitignore). Commit as "baseline: intentionally slow feed" and push to `main`.
-3. Record the baseline commit SHA. Protect nothing; Devin needs push access to branches.
-4. Connect this repo to Devin: Devin settings -> Integrations/GitHub -> install the Devin GitHub app on
-   `runway-startup-repo` (only this repo). Confirm Devin lists it as an available repository.
+TASK 1 - Connect THIS repo to Devin (decision 13:00: Devin works in the main repo, no throwaway) (5 min)
+1. Devin settings -> Integrations/GitHub -> install the Devin GitHub app on
+   `kirilltarasov-dev/startup-together-`. Confirm Devin lists it as an available repository.
+2. Record the current `main` SHA as BASELINE_SHA (the verifier rejects candidates that touch
+   anything outside `startup-repo/`).
+3. Devin must push to branches named `devin/*` only and never merge. Do not protect `main` in a way
+   that blocks teammates; a simple "no force push" rule is enough.
 
 TASK 2 - Devin API access check (5 min)
 1. Verify the org has API access and note ACU/spending limits. Set a conservative per-session ACU
@@ -35,15 +35,17 @@ TASK 2 - Devin API access check (5 min)
    Report only "ok / status code", never the key.
 
 TASK 3 - Start the FIRST REAL MISSION now (this produces our CACHED REAL RUN fallback) (5 min to start)
-Create one Devin session on `runway-startup-repo` with this exact prompt (structured output requested):
+Create one Devin session on `kirilltarasov-dev/startup-together-` with this exact prompt (structured output requested):
 
-  You are the lead engineer of a fictional startup. Repository: runway-startup-repo (FastAPI + SQLite).
-  Production incident: GET /feed is extremely slow under load. The cause is inside backend/feed.py
-  (full table scan, Python-side sort, per-post and per-like queries). Fix the bottleneck so that
-  get_feed(limit) preserves exactly the same output shape, ordering (newest first), like counts and
-  pro_likes semantics. Do not change tests/, benchmark/, database schema, or the HTTP API.
-  Run pytest and the benchmark before and after. Push your work to a branch named devin/optimize-feed
-  and do NOT merge. Finish with a summary containing: root_cause, files_changed, before_seconds,
+  You are the lead engineer of a fictional startup. Work ONLY inside the folder startup-repo/ of
+  repository kirilltarasov-dev/startup-together- (FastAPI + SQLite). Do not touch apps/, services/,
+  docs/, or any file outside startup-repo/. Production incident: GET /feed is extremely slow under
+  load. The cause is inside startup-repo/backend/feed.py (full table scan, Python-side sort,
+  per-post and per-like queries). Fix the bottleneck so that get_feed(limit) preserves exactly the
+  same output shape, ordering (newest first), like counts and pro_likes semantics. Do not change
+  tests/, benchmark/, the database schema, or the HTTP API. Run pytest and the benchmark from inside
+  startup-repo/ before and after. Push your work to a branch named devin/optimize-feed and do NOT
+  merge or open a PR against main. Finish with a summary containing: root_cause, files_changed, before_seconds,
   after_seconds, tests_passed, tests_total, branch, commit_sha.
 
 Record: session ID, session URL, start time. Do not wait for it; move to Task 4 and check back.
@@ -52,7 +54,7 @@ TASK 4 - Railway skeleton (10 min)
 1. Create a Railway project + service "runway-orchestrator". Deploy a minimal FastAPI app with
    `GET /health -> {"ok": true}` (a two-file placeholder is fine; the real orchestrator code lands
    later on branch `feat/orchestrator` under `services/orchestrator/`).
-2. Set env vars: `DEVIN_API_KEY`, `DEVIN_ORG_ID` (if applicable), `CHALLENGE_REPO=<org>/runway-startup-repo`,
+2. Set env vars: `DEVIN_API_KEY`, `DEVIN_ORG_ID` (if applicable), `CHALLENGE_REPO=kirilltarasov-dev/startup-together-`, `CHALLENGE_PATH=startup-repo`,
    `BASELINE_SHA=<from task 1>`, `ORCH_TOKEN=<random 32 chars>` (shared secret the frontend route will send),
    `ALLOWED_ORIGIN=<vercel url once known>`.
 3. Report the public Railway URL and confirm `curl <url>/health` returns ok.
@@ -69,7 +71,7 @@ Report its final status, status_detail, branch name, commit SHA, and the structu
 Do NOT merge the branch. Do NOT run the candidate code on your machine. Leave it for the verifier.
 
 REPORT BACK (paste into the team chat, no secrets):
-- runway-startup-repo URL + baseline SHA
+- BASELINE_SHA of main
 - Devin repo connection: ok / not ok
 - Devin API check: ok / status
 - Session ID + URL + start time (+ final status, branch, commit when done)

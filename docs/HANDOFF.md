@@ -16,7 +16,10 @@ User update recorded September 19, 2026, 12:35 CEST (supersedes 11:59 entries be
   a ~500k-post database so the incident is visibly slow (~2.3 s) and a real fix is visibly fast.
 - Hosting: **Vercel** = static frontend + `/api/voice/session` route holding `OPENAI_API_KEY`.
   **Railway** = FastAPI orchestrator container holding `DEVIN_API_KEY` and serving `/api/missions`.
-- Devin key and GitHub org are provided by the user; Lane C creates the throwaway challenge repo.
+- 13:00: Devin works in **this repo** (`kirilltarasov-dev/startup-together-`), constrained to
+  `startup-repo/`, pushing `devin/*` branches only. No throwaway repo. The verifier rejects any
+  candidate diff outside `startup-repo/`. Devin key and hosting are set up by the infra owner via
+  [COLLEAGUE_SETUP_PROMPT.md](COLLEAGUE_SETUP_PROMPT.md). Voice is gpt-live-1 via a Vercel server route, not Web Speech API.
 - Frozen script: [SKIT.md](SKIT.md). Frozen visuals: [DIRECTION.md](DIRECTION.md).
 - Cut order if the clock slips (decided at 14:00 by the user): container isolation -> third dressing
   -> title cards -> voice moment 3 -> voice moment 1. Voice moment 2 and the real mission are never cut.
