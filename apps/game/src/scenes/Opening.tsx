@@ -1,7 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { BigButton } from '../components/ui'
-import { useGame } from '../state/gameStore'
+import { initialState, useGame } from '../state/gameStore'
+import { loadCampaign } from '../state/campaignSave'
+import { useRun } from '../state/runStore'
 import { sfx } from '../state/sfx'
 
 const CARDS: Array<string[]> = [
@@ -12,7 +14,9 @@ const CARDS: Array<string[]> = [
 ]
 
 export function Opening() {
-  const setScreen = useGame((s) => s.setScreen)
+  const start = useGame((s) => s.start)
+  const resume = useGame((s) => s.resumeCampaign)
+  const [saved] = useState(() => loadCampaign(initialState()))
   const [i, setI] = useState(0)
 
   useEffect(() => {
@@ -44,13 +48,20 @@ export function Opening() {
               initial={{ letterSpacing: '0.1em', opacity: 0 }}
               animate={{ letterSpacing: '0.5em', opacity: 1 }}
               transition={{ duration: 1.2 }}
-              className="text-8xl font-bold"
+              className="text-4xl sm:text-8xl font-bold"
             >
               RUNWAY
             </motion.h1>
             <p className="mt-3 opacity-60 tracking-widest text-sm">A STARTUP SURVIVAL GAME · POWERED BY DEVIN</p>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="mt-12">
-              <BigButton onClick={() => { sfx('deploy'); setScreen('play') }}>START RUNWAY</BigButton>
+              <div className="flex flex-wrap justify-center gap-3 px-4">
+                <BigButton onClick={() => { useRun.getState().clearMission(); sfx('deploy'); start('demo') }}>START RUNWAY</BigButton>
+                <BigButton className="!bg-gold" onClick={() => { useRun.getState().clearMission(); sfx('deploy'); start('campaign') }}>NEW CAMPAIGN</BigButton>
+                {saved && <BigButton className="!bg-panel !text-mint border border-line" onClick={() => { useRun.getState().clearMission(); resume() }}>RESUME CAMPAIGN</BigButton>}
+              </div>
+              <p className="mt-4 text-sm opacity-70">Demo: the original 5 decisions. Campaign: 35 encounters, five chapters, local save.</p>
+              <p className="mt-1 text-xs opacity-50">Extended campaign beta · playtime not yet calibrated. New campaign replaces the local campaign save.</p>
+              {saved?.resolved.E04 === 'send_devin' && saved.missionOutcome === 'none' && <p className="mx-auto mt-3 max-w-xl text-sm text-gold">An interrupted mission will resume with a manual workaround, not another paid task. Any remote session may still be running.</p>}
             </motion.div>
           </motion.div>
         )}

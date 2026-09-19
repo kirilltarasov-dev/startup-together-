@@ -21,9 +21,16 @@ export type Screen =
   | 'ending'
 
 /** Stable event ids from docs/SKIT.md */
-export type EventId = 'E01' | 'E02' | 'E03' | 'E04' | 'E05'
+export type EventId = 'E01' | 'E02' | 'E03' | 'E04' | 'E05' | `C${number}`
+export type GameMode = 'demo' | 'campaign'
 
 export interface GameState {
+  mode: GameMode
+  trust: number
+  debt: number
+  revenue: number
+  flags: Record<string, boolean>
+  enteredEvents: Partial<Record<EventId, boolean>>
   screen: Screen
   scene: SceneId
   location: Location
@@ -46,6 +53,11 @@ export interface GameState {
 }
 
 export interface Effects {
+  trust?: number
+  debt?: number
+  revenue?: number
+  days?: number
+  flags?: Record<string, boolean>
   cash?: number
   users?: number
   health?: number
@@ -67,6 +79,9 @@ export interface Choice {
 export interface Line { who: FounderId; text: string }
 
 export interface GameEvent {
+  chapter?: string
+  variant?: { when: string; title: string; dialogue: Line[]; choices: Choice[] }
+  conversations?: { label: string; lines: Line[] }[]
   id: EventId
   scene: SceneId
   icon: string

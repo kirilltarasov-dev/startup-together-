@@ -29,6 +29,6 @@ export const useRun = create<RunState>((set) => ({
   setAgentMode: (agentMode) => set({ agentMode }),
   setMission: (mission) => set({ mission, status: null }),
   setStatus: (status) => set({ status }),
-  clearMission: () => set({ mission: null, status: null }),
+  clearMission: () => set({ mission: null, status: null, voiceRequest: null }),
   toggleMute: () => set((s) => ({ muted: !s.muted })),
 }))

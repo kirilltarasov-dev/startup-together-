@@ -1,10 +1,13 @@
 /** Pure game rules from docs/SKIT.md. No rendering, no input. */
-import { EVENTS } from '../events/skit'
-import { useGame } from '../state/gameStore'
-import { _setVoiceContext, _setVoiceDispatcher, type VoiceContext } from '../state/voiceBridge'
+import { EVENTS } from '../events/skit.ts'
+import { CAMPAIGN_EVENTS, campaignEventAt, campaignEnding } from '../events/campaign.ts'
+import { applyEffects } from './effects.ts'
+import { useGame } from '../state/gameStore.ts'
+import { _setVoiceContext, _setVoiceDispatcher, type VoiceContext } from '../state/voiceBridge.ts'
 import type { Choice, GameEvent, GameState } from '../state/types'
 
-export const currentEvent = (s: Pick<GameState, 'eventIndex'>): GameEvent | undefined => EVENTS[s.eventIndex]
+export const eventSequence = (s: Pick<GameState, 'mode'>): GameEvent[] => s.mode === 'campaign' ? CAMPAIGN_EVENTS : EVENTS
+export const currentEvent = (s: Pick<GameState, 'mode' | 'eventIndex' | 'flags' | 'missionOutcome'>): GameEvent | undefined => s.mode === 'campaign' ? campaignEventAt(s.eventIndex, s) : EVENTS[s.eventIndex]
 
 /** Verified mission effects (frozen). */
 export const MISSION_EFFECTS = {
@@ -13,7 +16,7 @@ export const MISSION_EFFECTS = {
 } as const
 
 /** Ending rule: cash > 0 and health >= 50 → still in business. */
-export const ending = (s: Pick<GameState, 'cash' | 'health'>) => (s.cash > 0 && s.health >= 50 ? 'STILL IN BUSINESS' : 'BACK TO THE HACKATHON')
+export const ending = (s: GameState) => s.mode === 'campaign' ? campaignEnding(s) : (s.cash > 0 && s.health >= 50 ? 'STILL IN BUSINESS' : 'BACK TO THE HACKATHON')
 
 /**
  * Apply a choice exactly once. Returns false if the event was already resolved or the id is illegal.
@@ -21,11 +24,11 @@ export const ending = (s: Pick<GameState, 'cash' | 'health'>) => (s.cash > 0 && 
  */
 export function resolveChoice(event: GameEvent, choiceId: string): Choice | null {
   const g = useGame.getState()
-  if (g.resolved[event.id]) return null
-  const choice = event.choices.find((c) => c.id === choiceId)
+  const active = currentEvent(g)
+  if (g.resolved[event.id] || active?.id !== event.id) return null
+  const choice = active.choices.find((c) => c.id === choiceId)
   if (!choice) return null
-  g.markResolved(event.id, choice.id)
-  if (choice.effects) g.apply(choice.effects)
+  g.set({ ...applyEffects(g, choice.effects ?? {}), resolved: { ...g.resolved, [event.id]: choice.id } })
   return choice
 }
 

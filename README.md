@@ -3,6 +3,16 @@
 A startup survival game where Devin is your actual AI engineer.
 Brief: [RUNWAY.md](./RUNWAY.md)
 
+## Play Modes
+
+- **START RUNWAY** retains the original five-decision demo and its existing voice/Devin moments.
+- **NEW CAMPAIGN** starts an extended beta: 35 encounters across five chapters, conditional scenes that remember earlier choices, optional founder conversations, trust, technical debt, daily cashflow and multiple endings. Reuses the three existing locations and the single engineering mission; no additional paid missions are added.
+- **SAVE & TITLE / RESUME CAMPAIGN** use browser-local storage. New campaign replaces that local save. A resumed interrupted mission uses the disclosed manual workaround rather than starting another paid task; it does not cancel a remote session that may still be running.
+
+An hour of play is a design target, **not measured or guaranteed**. There are no artificial waiting timers to pad campaign length. The short demo stays available.
+
+From `apps/game`, run `npm test`, `npm run lint`, and `npm run build`. With a development/preview server running, `TEST_URL=http://127.0.0.1:5182 node scripts/campaign.browser.mjs` checks all 35 encounters, save/reload/resume and switching back to the demo without calling paid APIs. `npm run test:browser` remains the manual five-event regression (set `TEST_URL` to your server).
+
 ## Layout
 
 ```
@@ -16,7 +26,7 @@ cache/                   Recorded real Devin runs for CACHED demo mode
 ## Architecture
 
 ```
-PLAYER  (clicks / voice via Web Speech API, in-browser)
+PLAYER  (clicks / gpt-live-1 voice via WebRTC and Vercel session route)
   |
   v
 FRONTEND  apps/game  -> VERCEL
