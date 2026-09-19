@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import type { Effects, EventId, GameState, Screen, SceneId } from './types'
-
-const clamp = (v: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v))
+import type { Effects, EventId, GameMode, GameState, Screen, SceneId } from './types'
+import { applyEffects } from '../engine/effects.ts'
+import { loadCampaign, saveCampaign } from './campaignSave.ts'
 const newRunId = () => Math.random().toString(36).slice(2, 10)
 
 export const FOUNDERS: GameState['founders'] = {
@@ -14,6 +14,7 @@ export const SCENE_LOCATION: Record<SceneId, GameState['location']> = { S1: 'Bud
 
 /** Start state from docs/SKIT.md */
 export const initialState = (): GameState => ({
+  mode: 'demo', trust: 50, debt: 30, revenue: 0, flags: {}, enteredEvents: {},
   screen: 'opening',
   scene: 'S1',
   location: 'Budapest',
@@ -38,6 +39,9 @@ export const runwayLabel = (s: Pick<GameState, 'cash' | 'dailyBurn'>) =>
   s.dailyBurn <= 0 ? 'unbounded' : `${Math.floor(s.cash / s.dailyBurn)} d`
 
 interface Actions {
+  start: (mode: GameMode) => void
+  resumeCampaign: () => boolean
+  enterEvent: (id: EventId, fx?: Effects) => void
   setScreen: (screen: Screen) => void
   goScene: (scene: SceneId) => void
   apply: (fx: Effects) => void
@@ -50,24 +54,33 @@ interface Actions {
 export const useGame = create<GameState & Actions>((set, get) => ({
   ...initialState(),
 
+  start: (mode) => set({ ...initialState(), mode, screen: 'play' }),
+  resumeCampaign: () => {
+    const saved = loadCampaign(initialState())
+    if (!saved) return false
+    if (saved.missionOutcome === 'none' && saved.resolved.E04 === 'send_devin') {
+      Object.assign(saved, applyEffects(saved, { health: 10, users: -300, flags: { interruptedMission: true } }))
+      saved.missionOutcome = 'skipped'
+      saved.screen = 'play'
+    }
+    set(saved)
+    return true
+  },
+  enterEvent: (id, fx) => {
+    const state = get()
+    if (state.enteredEvents[id]) return
+    set({ ...applyEffects(state, fx ?? {}), enteredEvents: { ...state.enteredEvents, [id]: true } })
+  },
   setScreen: (screen) => set({ screen }),
-  goScene: (scene) => set({ scene, location: SCENE_LOCATION[scene], day: scene === 'S1' ? 1 : scene === 'S2' ? 42 : 71 }),
+  goScene: (scene) => set({ scene, location: SCENE_LOCATION[scene], day: Math.max(get().day, scene === 'S1' ? 1 : scene === 'S2' ? 42 : 71) }),
   set: (patch) => set(patch),
 
-  apply: (fx) => {
-    const s = get()
-    set({
-      cash: Math.max(0, s.cash + (fx.cash ?? 0)),
-      users: Math.max(0, s.users + (fx.users ?? 0)),
-      health: clamp(s.health + (fx.health ?? 0)),
-      morale: clamp(s.morale + (fx.morale ?? 0)),
-      ownership: fx.ownership ?? s.ownership,
-      dailyBurn: fx.dailyBurn ?? s.dailyBurn,
-    })
-  },
+  apply: (fx) => set(applyEffects(get(), fx)),
 
   markResolved: (eventId, choiceId) => set({ resolved: { ...get().resolved, [eventId]: choiceId } }),
   nextEvent: () => set({ eventIndex: get().eventIndex + 1 }),
 
   restart: () => set({ ...initialState() }),
 }))
+
+useGame.subscribe((state) => { saveCampaign(state) })

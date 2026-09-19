@@ -3,8 +3,9 @@ import { useEffect, useState } from 'react'
 import { EventCard } from '../components/EventCard'
 import { HUD } from '../components/HUD'
 import { World, type Mood } from '../components/World'
-import { currentEvent, resolveChoice } from '../engine/engine'
-import { DISABLE_FEED_SECOND, EVENTS, MISSION_LINES } from '../events/skit'
+import { currentEvent, eventSequence, resolveChoice } from '../engine/engine'
+import { DISABLE_FEED_SECOND, MISSION_LINES } from '../events/skit'
+import { saveCampaign } from '../state/campaignSave'
 import { useGame } from '../state/gameStore'
 import { useRun } from '../state/runStore'
 import type { Choice, FounderId, GameEvent, Line } from '../state/types'
@@ -18,6 +19,8 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
   const g = useGame()
   const run = useRun()
   const event = currentEvent(g)
+  const sequence = eventSequence(g)
+  const [saveError, setSaveError] = useState('')
   const [reaction, setReaction] = useState<Line[] | null>(null)
   const [speaker, setSpeaker] = useState<FounderId | undefined>()
   const [shake, setShake] = useState(false)
@@ -28,9 +31,11 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
   useEffect(() => {
     if (!event || entered === event.id) return
     setEntered(event.id)
-    setReaction(null)
-    if (event.onEnter) {
-      g.apply(event.onEnter)
+    const previous = [...event.choices, ...(event.variant?.choices ?? [])].find((choice) => choice.id === g.resolved[event.id])
+    setReaction(previous ? previous.reaction ? [previous.reaction] : [] : null)
+    const firstEntry = !g.enteredEvents[event.id]
+    g.enterEvent(event.id, event.onEnter)
+    if (event.onEnter && firstEntry) {
       if (event.id === 'E04') { sfx('incident', 0.7); setShake(true); setTimeout(() => setShake(false), 600) }
     }
   }, [event?.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -76,7 +81,7 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
 
   const next = () => {
     const idx = g.eventIndex
-    const nextEv: GameEvent | undefined = EVENTS[idx + 1]
+    const nextEv: GameEvent | undefined = sequence[idx + 1]
     if (event.id === 'E02') { g.setScreen('result'); return }
     if (!nextEv) { g.setScreen('ending'); return }
     if (nextEv.scene !== event.scene) { setDoor(true); return }
@@ -84,7 +89,7 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
   }
 
   const walkThroughDoor = () => {
-    const nextEv = EVENTS[g.eventIndex + 1]
+    const nextEv = sequence[g.eventIndex + 1]
     sfx('door')
     setDoor(false)
     g.goScene(nextEv.scene)
@@ -94,6 +99,16 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
   return (
     <div className="h-full flex flex-col">
       <HUD />
+      {g.mode === 'campaign' && <nav aria-label="Campaign progress" className="flex shrink-0 flex-wrap items-center justify-between gap-2 bg-panel px-4 py-2 text-xs">
+        <span className="text-gold">{event.chapter} · {g.eventIndex + 1}/{sequence.length}</span>
+        <span>Trust {g.trust} · Debt {g.debt} · Revenue €{g.revenue}/day · Burn €{g.dailyBurn}/day</span>
+        <button className="rounded border border-line px-3 py-1 hover:border-mint focus-visible:ring-2 focus-visible:ring-mint" onClick={() => {
+          if (saveCampaign(g)) g.setScreen('opening')
+          else setSaveError('Browser storage unavailable. Keep this tab open to preserve your run.')
+        }}>SAVE & TITLE</button>
+        {saveError && <span role="alert">{saveError}</span>}
+        {g.flags.interruptedMission && event.id === 'E04' && <span role="status">Interrupted mission not restarted. Continuing with the manual workaround; a remote session may still be running.</span>}
+      </nav>}
       <World key={g.scene} scene={g.scene} mood={mood} active={speaker} shake={shake}>
         <AnimatePresence mode="wait">
           {door ? (

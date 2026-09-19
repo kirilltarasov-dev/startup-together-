@@ -1,0 +1,169 @@
+{
+  "provider": "Poly Haven",
+  "license": "CC0-1.0",
+  "licenseUrl": "https://polyhaven.com/license",
+  "files": [
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/modular_factory_facade/modular_factory_facade_1k.gltf",
+      "bytes": 372666,
+      "sha256": "41ff58b722f9cb3e9db8bcacae3163946603ae99a1d42bb6f9045d7c4ec0f179"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_brick_diff_1k.jpg",
+      "bytes": 1115986,
+      "sha256": "852b01c61efc07fd8e60e59767657ef51112bf65f5eaf184f02c27ea5170582d"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_doors_diff_1k.jpg",
+      "bytes": 570733,
+      "sha256": "157b59b9d1c929e51e2747f4f9481389743acba539308cecbb98c17294b6c7e1"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_trim_01_arm_1k.jpg",
+      "bytes": 733418,
+      "sha256": "0ab1657c75a9b5beb3d5552adfafccdd5174c391f20ccd6c0b41939c1a8bfe3f"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_doors_arm_1k.jpg",
+      "bytes": 723782,
+      "sha256": "794b16de5bd2aae6431fd8aee7b10b3b1095bbe89b233a158a1e031e0a27c4e3"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_trim_01_diff_1k.jpg",
+      "bytes": 617348,
+      "sha256": "beff49832938c5493a4b5bbb82eeabd138c29c6523e5228e006f702859bbc87f"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_windows_arm_1k.jpg",
+      "bytes": 873236,
+      "sha256": "7bfc0d579188dd88bb2d8962ae81402e6ccabff244709e68ba3be4cc5d500d0d"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_garage_nor_gl_1k.jpg",
+      "bytes": 752068,
+      "sha256": "e8ac6265622fb8c8df454ae02a75746bc37ded0d4533dbe65fa275d0e40f28ba"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_windows_nor_gl_1k.jpg",
+      "bytes": 612643,
+      "sha256": "4dc9e4a6b97d5384849faeebca87eae9f6736664971c6c10a41fc19bd01fc106"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_trim_01_nor_gl_1k.jpg",
+      "bytes": 827556,
+      "sha256": "05441cf545c9d5f6786cd191e9b3b627668b1176e155d1fae7fbe28f6a8d3802"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_garage_diff_1k.jpg",
+      "bytes": 588149,
+      "sha256": "d1cf6239c7364900b02279600937a4c9bf0a21d315efabf18f16d5637020e39f"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_brick_arm_1k.jpg",
+      "bytes": 726245,
+      "sha256": "322cba4e6b03e39fa2a57335deddfbda6d819f8b29b108b9000790ded99b0d95"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_brick_nor_gl_1k.jpg",
+      "bytes": 1052229,
+      "sha256": "1168796e949c5ce3957142e86bce1d09531466aaea90dc46cbc3f3225cbdd78e"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_doors_nor_gl_1k.jpg",
+      "bytes": 488916,
+      "sha256": "1e3bdff6d4b30cb26e901d6d14e42d398aeacfb46767900404eb38ec5ba016dc"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_windows_diff_1k.jpg",
+      "bytes": 619613,
+      "sha256": "d361dacbd23095dacf1d82eb5a509a305c44b007f8adfb221dc2e5efe56180e0"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/modular_factory_facade/modular_factory_facade.bin",
+      "bytes": 6269260,
+      "sha256": "12702fb065a838695e0621e1aac3947af92d32c439fb965c8b0563ad691fed70"
+    },
+    {
+      "asset": "modular_factory_facade",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/modular_factory_facade/modular_factory_facade_garage_arm_1k.jpg",
+      "bytes": 682331,
+      "sha256": "a72cfa9020a0a7aad2476b2ceb3c60dc21ac69d4e9026dcddc82710e6784b40f"
+    },
+    {
+      "asset": "SchoolChair_01",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/SchoolChair_01/SchoolChair_01_1k.gltf",
+      "bytes": 2695,
+      "sha256": "1db6aca4bf379c2d568b2068492dcfcda15d764c0c3d98a970055af25b46281e"
+    },
+    {
+      "asset": "SchoolChair_01",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/SchoolChair_01/SchoolChair_01_nor_gl_1k.jpg",
+      "bytes": 189532,
+      "sha256": "4ee930562ad26e8c98af75e8aa6577d01cb56f6d22628f4e95c385e5364f0623"
+    },
+    {
+      "asset": "SchoolChair_01",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/SchoolChair_01/SchoolChair_01_diff_1k.jpg",
+      "bytes": 52590,
+      "sha256": "f10ae4dbddfb056ef716770ebd96e0eff0aa6f0b5ad0f263ff51c5cade6e1d8f"
+    },
+    {
+      "asset": "SchoolChair_01",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/SchoolChair_01/SchoolChair_01_arm_1k.jpg",
+      "bytes": 104994,
+      "sha256": "ff773eb01c9d59130dc3cc0274951ac626d73fa1b2f7eee519af4ca80835568b"
+    },
+    {
+      "asset": "SchoolChair_01",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/SchoolChair_01/SchoolChair_01.bin",
+      "bytes": 134912,
+      "sha256": "7d64d556ba88d3962778085b9a190f1adb0d84e667bca8ef032c0ae34b31a9fe"
+    },
+    {
+      "asset": "wooden_table_02",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/wooden_table_02/wooden_table_02_1k.gltf",
+      "bytes": 2687,
+      "sha256": "bb38e301840cb629d72c43c83fdb7fb308518efe2d0bc01e1ed0e9a9e43ed9d3"
+    },
+    {
+      "asset": "wooden_table_02",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_table_02/wooden_table_02_diff_1k.jpg",
+      "bytes": 178379,
+      "sha256": "2334ac3e23d69222322515d9bad066b4e90d7d81989fe231b8fb12f39179ad9e"
+    },
+    {
+      "asset": "wooden_table_02",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_table_02/wooden_table_02_nor_gl_1k.jpg",
+      "bytes": 122129,
+      "sha256": "9470e08e5dab4ab6a7cafab2a488a50fb54fa8f38890e9032c39dcbf7f5846d2"
+    },
+    {
+      "asset": "wooden_table_02",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/4k/wooden_table_02/wooden_table_02.bin",
+      "bytes": 7576,
+      "sha256": "52ed7cc67b3aa403375cf9bd18050e8cc21bcced6532a0183c1a733f0965df6d"
+    },
+    {
+      "asset": "wooden_table_02",
+      "source": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/wooden_table_02/wooden_table_02_arm_1k.jpg",
+      "bytes": 174545,
+      "sha256": "b970a81e4b03f3b8a341c9eb639f112fff1782d681c846255ebc9073cd803ced"
+    }
+  ]
+}

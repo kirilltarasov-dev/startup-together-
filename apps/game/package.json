@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "node --test firstPerson.test.ts characterAssets.test.mjs",
+    "test": "node --test firstPerson.test.ts characterAssets.test.mjs campaign.test.ts environmentAssets.test.mjs grassField.test.ts realismAssets.test.mjs sergioAsset.test.mjs",
     "test:browser": "node firstPerson.browser.mjs",
     "preview": "vite preview"
   },

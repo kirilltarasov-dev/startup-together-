@@ -56,7 +56,7 @@ export function EventCard({ event, reaction, onChoose, onContinue, onSpeaker, ur
     >
       <div className="flex items-center justify-between">
         <div>
-          <div className={`text-[10px] tracking-[0.3em] ${urgent ? 'text-[#FF5A5F]' : 'opacity-50'}`}>{event.id} · {urgent ? 'PRODUCTION INCIDENT' : event.scene}</div>
+          <div className={`text-[10px] tracking-[0.3em] ${urgent ? 'text-[#FF5A5F]' : 'opacity-50'}`}>{event.id} · {urgent ? 'PRODUCTION INCIDENT' : event.chapter ?? event.scene}</div>
           <h2 className="text-3xl font-bold leading-tight">{event.title}</h2>
         </div>
         {event.voice && ready && !reaction && voiceSlot}
@@ -66,6 +66,10 @@ export function EventCard({ event, reaction, onChoose, onContinue, onSpeaker, ur
         {event.dialogue.slice(0, shown).map((l, i) => <Speech key={i} line={l} />)}
       </div>
 
+      {ready && !reaction && event.conversations?.map((conversation) => <details key={conversation.label} className="mt-3 rounded border border-line p-3" onToggle={(e) => { if (e.currentTarget.open) onSpeaker(conversation.lines[0]?.who) }}>
+        <summary className="cursor-pointer text-sm text-mint focus-visible:ring-2 focus-visible:ring-mint">{conversation.label}</summary>
+        <section className="mt-3 space-y-2">{conversation.lines.map((line, i) => <Speech key={i} line={line} />)}</section>
+      </details>)}
       <AnimatePresence mode="wait">
         {reaction ? (
           <motion.div key="reaction" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-5 border-t border-line pt-4">

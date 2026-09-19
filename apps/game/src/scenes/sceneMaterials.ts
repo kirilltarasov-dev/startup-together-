@@ -1,4 +1,32 @@
 import * as THREE from 'three'
+import { useTexture } from '@react-three/drei'
+import { useMemo } from 'react'
+
+export interface Surface {
+  map: THREE.Texture
+  normalMap?: THREE.Texture
+  roughnessMap?: THREE.Texture
+  meters: [number, number]
+}
+
+const SURFACES = ['brick', 'concrete'] as const
+const CHANNELS = ['color', 'normal', 'roughness'] as const
+
+export function useEnvironmentSurfaces(): Record<'brick' | 'concrete', Surface> {
+  const textures = useTexture(SURFACES.flatMap((kind) => CHANNELS.map((channel) => `/assets/environment/${kind}-${channel}.jpg`)))
+  return useMemo(() => {
+    textures.forEach((texture, i) => {
+      texture.colorSpace = i % 3 === 0 ? THREE.SRGBColorSpace : THREE.NoColorSpace
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping
+      texture.anisotropy = 8
+      texture.needsUpdate = true
+    })
+    return {
+      brick: { map: textures[0], normalMap: textures[1], roughnessMap: textures[2], meters: [2, 2] },
+      concrete: { map: textures[3], normalMap: textures[4], roughnessMap: textures[5], meters: [2, 2] },
+    }
+  }, [textures])
+}
 
 export const MATERIAL = {
   sky: '#bdcfd0', fog: '#b9c7bc', sun: '#ffe4bd', ambient: '#c9dcdf', ground: '#686550',

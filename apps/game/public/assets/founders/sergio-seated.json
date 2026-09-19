@@ -1,0 +1,26 @@
+{
+  "source": "sergio-reference.blend",
+  "sourceSha256": "dabc28fc0d13d7c28c4f1cb463d217b2e81bc265425b781a111bbf98b0bd13e0",
+  "reference": "ChatGPT Image Sep 19, 2026, 01_55_43 PM.png",
+  "pose": "Locally fitted static seated derivative; original animation exports preserved separately",
+  "bones": 67,
+  "meshes": 18,
+  "seatedBoundsMeters": [
+    [
+      -0.28864040970802307,
+      0.28391608595848083
+    ],
+    [
+      -0.6064943075180054,
+      0.19390536844730377
+    ],
+    [
+      0.014512533321976662,
+      1.4633194208145142
+    ]
+  ],
+  "hipsHeightMeters": 0.6299999952316284,
+  "maxTextureDimension": 1024,
+  "outputBytes": 6527072,
+  "outputSha256": "4eeac7cfba57e78d64ad864b305153b5be95f00da8e235c556572073fdeeecf6"
+}

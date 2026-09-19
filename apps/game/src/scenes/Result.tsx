@@ -12,7 +12,7 @@ export function Result() {
   const [step, setStep] = useState(0)
 
   useEffect(() => {
-    if (step === 2) { g.apply({ users: 1 }); sfx('chime') }
+    if (step === 2 && !g.flags.hackathonReward) { g.apply({ users: 1, flags: { hackathonReward: true } }); sfx('chime') }
     if (step >= 3) return
     const t = setTimeout(() => setStep(step + 1), step === 0 ? 1400 : 1600)
     return () => clearTimeout(t)

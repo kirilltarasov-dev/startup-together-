@@ -1,0 +1,44 @@
+{
+  "assets": [
+    {
+      "file": "facade-kit.glb",
+      "source": "https://polyhaven.com/a/modular_factory_facade",
+      "license": "CC0-1.0",
+      "triangles": 6950,
+      "nodes": [
+        "FacadeWide",
+        "FacadeNarrow",
+        "FacadeDoor",
+        "FacadeCornice",
+        "FacadeBase"
+      ],
+      "bytes": 1233508,
+      "sha256": "5882f12623c6b109376b9830b43576f68c2e7a822e92c354c2e8d87272bcf9e2",
+      "maxTextureDimension": 512
+    },
+    {
+      "file": "school-chair.glb",
+      "source": "https://polyhaven.com/a/SchoolChair_01",
+      "license": "CC0-1.0",
+      "triangles": 5072,
+      "nodes": [
+        "school-chair"
+      ],
+      "bytes": 483764,
+      "sha256": "ca2e167951a38d54be80ec36f56ac7e983776496213144d8dc85a770b3b09fc0",
+      "maxTextureDimension": 1024
+    },
+    {
+      "file": "wooden-table.glb",
+      "source": "https://polyhaven.com/a/wooden_table_02",
+      "license": "CC0-1.0",
+      "triangles": 196,
+      "nodes": [
+        "wooden-table"
+      ],
+      "bytes": 485100,
+      "sha256": "1047e5a28c8f070674467c228b25fd20ae4840b0ca274f930d262e5a063da15b",
+      "maxTextureDimension": 1024
+    }
+  ]
+}
