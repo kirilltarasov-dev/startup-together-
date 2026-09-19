@@ -1,4 +1,5 @@
 """RUNWAY orchestrator: turns a "Send Devin" click into a real, independently verified mission."""
+import asyncio
 import logging
 import secrets
 
@@ -6,7 +7,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from missions import ConstraintRejected, registry, sanitize_constraint
+from missions import ConstraintRejected, cache_payload, registry, sanitize_constraint
 from models import ALLOWED_INCIDENTS, CreateMission, CreateMissionResponse, MissionStatus
 
 log = logging.getLogger("orchestrator")
@@ -22,11 +23,22 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def _startup() -> None:
+async def _startup() -> None:
     if not settings.orch_token:
         log.warning("ORCH_TOKEN is not set: /api/* is UNPROTECTED (acceptable only for local dev)")
     log.info("mode=%s repo=%s path=%s baseline=%s", settings.mode, settings.challenge_repo,
              settings.challenge_path, settings.baseline_sha or "<unset>")
+    if settings.mode == "live":
+        asyncio.create_task(_warm_baseline())
+
+
+async def _warm_baseline() -> None:
+    from verifier import runner
+    try:
+        base = await runner.baseline()
+        log.info("baseline ready: %s", base)
+    except Exception as exc:  # noqa: BLE001
+        log.error("baseline measurement failed (will retry on first mission): %s", exc)
 
 
 def require_key(x_runway_key: str | None = Header(default=None)) -> None:
@@ -38,7 +50,19 @@ def require_key(x_runway_key: str | None = Header(default=None)) -> None:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True, "mode": settings.mode}
+    from verifier.runner import baseline_cached
+    return {"ok": True, "mode": settings.mode, "baseline": baseline_cached()}
+
+
+@app.get("/api/missions/{mission_id}/cache", dependencies=[Depends(require_key)])
+async def mission_cache(mission_id: str) -> dict:
+    """Download a finished real run in cache/optimize_feed.json shape (commit it by hand; never fabricate)."""
+    mission = registry.get(mission_id)
+    if not mission:
+        raise HTTPException(404, "no such mission")
+    if mission.mode != "live" or not mission.result:
+        raise HTTPException(409, "only finished live missions can be exported as a cached real run")
+    return cache_payload(mission)
 
 
 @app.post("/api/missions", response_model=CreateMissionResponse, dependencies=[Depends(require_key)])
