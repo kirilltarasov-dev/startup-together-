@@ -100,3 +100,33 @@ test('compressed tree geometry decodes with the runtime meshopt decoder and keep
   assert.ok(Math.abs(min[1] - -0.0255) < 0.01 && Math.abs(max[1] - 4.5517) < 0.01, `tree height preserved: ${min[1]}..${max[1]}`)
   assert.ok(Math.abs(min[0] - -1.3103) < 0.01 && Math.abs(max[2] - 2.8848) < 0.01, `tree footprint preserved: ${min}..${max}`)
 })
+
+test('grass density scales the drawn instance count without exceeding the built buffers', async () => {
+  const { GRASS_DENSITY_RANGE, clampGrassDensity, grassInstanceCount } = await import('./src/scenes/sceneMaterials.ts')
+  const { createGrassField } = await import('./src/scenes/grassField.ts')
+  assert.deepEqual(GRASS_DENSITY_RANGE, [0.3, 1])
+  assert.equal(clampGrassDensity(0.1), 0.3)
+  assert.equal(clampGrassDensity(1.7), 1)
+  assert.equal(clampGrassDensity(Number.NaN), 1, 'non-finite factor draws the full field')
+  assert.equal(grassInstanceCount(56000, 1), 56000)
+  assert.equal(grassInstanceCount(56000, 0.5), 28000)
+  assert.equal(grassInstanceCount(56000, 0.3), 16800)
+  assert.equal(grassInstanceCount(56000, 0), 16800, 'floor at the 0.3 minimum')
+  assert.equal(grassInstanceCount(56000, 2), 56000, 'never above the built count')
+  assert.equal(grassInstanceCount(0, 0.5), 0)
+  assert.equal(grassInstanceCount(1, 0.3), 1, 'a non-empty layer keeps at least one instance')
+  for (let factor = 0.3; factor <= 1.0001; factor += 0.05) {
+    const count = grassInstanceCount(56000, factor)
+    assert.ok(count >= 16800 && count <= 56000 && Number.isInteger(count))
+  }
+  // The built layers' first N blades are a uniform thinning: the field is laid out in random order, so the drawn
+  // subset at 30 % still spans the same footprint as the full field (within one cluster radius).
+  const field = createGrassField('grass')
+  const span = (count) => {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
+    for (let i = 0; i < count; i++) { const x = field.offsets[i * 3], z = field.offsets[i * 3 + 2]; minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z) }
+    return [minX, maxX, minZ, maxZ]
+  }
+  const full = span(field.count), thinned = span(grassInstanceCount(field.count, 0.3))
+  full.forEach((edge, i) => assert.ok(Math.abs(edge - thinned[i]) < 0.35, `footprint edge ${i} preserved at 30 %: ${edge} vs ${thinned[i]}`))
+})

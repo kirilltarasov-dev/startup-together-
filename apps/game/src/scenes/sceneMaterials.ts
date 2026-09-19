@@ -60,6 +60,26 @@ export function seededRandom(seed: number) {
   }
 }
 
+// Quality scaling helpers (pure; unit-tested from environmentAssets.test.mjs, consumed by InteractiveGrass).
+
+export const GRASS_DENSITY_RANGE: readonly [number, number] = [0.3, 1]
+
+/** Clamp a quality density factor to the supported grass range (0.3..1); non-finite input means "full". */
+export function clampGrassDensity(factor: number) {
+  if (!Number.isFinite(factor)) return GRASS_DENSITY_RANGE[1]
+  return Math.min(GRASS_DENSITY_RANGE[1], Math.max(GRASS_DENSITY_RANGE[0], factor))
+}
+
+/**
+ * Instances to draw for a built ground-cover layer at a density factor. Blades are laid out in random order, so
+ * drawing the first N of the already-built buffers is a uniform thinning; nothing is rebuilt. Never exceeds the
+ * built count and keeps at least one instance of a non-empty layer so the draw call stays valid.
+ */
+export function grassInstanceCount(builtCount: number, factor: number) {
+  if (builtCount <= 0) return 0
+  return Math.max(1, Math.min(builtCount, Math.round(builtCount * clampGrassDensity(factor))))
+}
+
 function canvasTexture(width: number, height: number, draw: (ctx: CanvasRenderingContext2D, random: () => number) => void, seed = 1, colorSpace: THREE.ColorSpace = THREE.SRGBColorSpace) {
   const canvas = document.createElement('canvas')
   canvas.width = width

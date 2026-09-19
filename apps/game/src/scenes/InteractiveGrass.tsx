@@ -1,12 +1,27 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import * as THREE from 'three'
-import { MATERIAL } from './sceneMaterials'
+import { MATERIAL, clampGrassDensity, grassInstanceCount } from './sceneMaterials'
 import { GRASS_WIND_AMPLITUDE, createGrassField, grassBounds, type GroundCoverKind } from './grassField'
 import { WIND_GLSL, getWindUniforms, useWindDriver } from './wind'
 
 declare global {
   interface Window { __runwayRendererInfo?: () => Record<string, number> }
+}
+
+// Quality hook (world/quality.ts calls setGrassDensity from subscribeQuality; this module never imports it).
+// Density only changes `geometry.instanceCount` on the already-built layers — no buffer rebuild, no re-upload.
+let grassDensity = 1
+const densityListeners = new Set<(factor: number) => void>()
+
+export function getGrassDensity() { return grassDensity }
+
+/** Fraction (0.3..1) of the built ground-cover instances to draw; applies immediately to mounted grass. */
+export function setGrassDensity(factor: number) {
+  const next = clampGrassDensity(factor)
+  if (next === grassDensity) return
+  grassDensity = next
+  densityListeners.forEach((listener) => listener(next))
 }
 
 export interface GrassInteraction {
@@ -140,7 +155,7 @@ export function InteractiveGrass({ interactionRef, reducedMotion }: { interactio
       const depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide })
       depthMaterial.onBeforeCompile = (shader) => meadowVertex(shader, uniforms)
       depthMaterial.customProgramCacheKey = () => 'runway-reactive-meadow-v4-depth'
-      return { kind, geometry, material, depthMaterial }
+      return { kind, geometry, material, depthMaterial, built: geometry.instanceCount }
     })
     return { layers, uniforms }
   }, [])
@@ -148,10 +163,21 @@ export function InteractiveGrass({ interactionRef, reducedMotion }: { interactio
   const gl = useThree((state) => state.gl)
   useEffect(() => () => layers.forEach(({ geometry, material, depthMaterial }) => { geometry.dispose(); material.dispose(); depthMaterial.dispose() }), [layers])
   useEffect(() => {
-    // Debug/verification hook (scripts/grass-reference.browser.mjs): renderer stats + static grass budget.
-    const instances = layers.reduce((sum, { geometry }) => sum + geometry.instanceCount, 0)
-    const triangles = layers.reduce((sum, { geometry }) => sum + geometry.instanceCount * (geometry.index?.count ?? 0) / 3, 0)
-    window.__runwayRendererInfo = () => ({ calls: gl.info.render.calls, triangles: gl.info.render.triangles, geometries: gl.info.memory.geometries, textures: gl.info.memory.textures, grassInstances: instances, grassTriangles: triangles })
+    // Quality density: draw the first N built instances of every layer (buffers untouched).
+    const apply = (factor: number) => layers.forEach(({ geometry, built }) => { geometry.instanceCount = grassInstanceCount(built, factor) })
+    apply(grassDensity)
+    densityListeners.add(apply)
+    return () => { densityListeners.delete(apply) }
+  }, [layers])
+  useEffect(() => {
+    // Debug/verification hook (scripts/grass-reference.browser.mjs): renderer stats + the grass budget as drawn.
+    window.__runwayRendererInfo = () => ({
+      calls: gl.info.render.calls, triangles: gl.info.render.triangles, geometries: gl.info.memory.geometries, textures: gl.info.memory.textures,
+      grassInstances: layers.reduce((sum, { geometry }) => sum + geometry.instanceCount, 0),
+      grassTriangles: layers.reduce((sum, { geometry }) => sum + geometry.instanceCount * (geometry.index?.count ?? 0) / 3, 0),
+      grassBuilt: layers.reduce((sum, { built }) => sum + built, 0),
+      grassDensity,
+    })
     return () => { delete window.__runwayRendererInfo }
   }, [layers, gl])
   useFrame(() => {
