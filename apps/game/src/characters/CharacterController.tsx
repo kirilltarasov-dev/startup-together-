@@ -9,6 +9,8 @@ import type { CharacterId } from './CharacterCustomization'
 import type { GrassInteraction } from '../scenes/InteractiveGrass'
 import { CAMERA_COLLIDERS } from '../world/colliderSpec'
 import { CAMERA_TARGET_OFFSET_Y, LOCOMOTION, PLAYER_BODY, SPAWN_POSITION } from './playerBody'
+import { useFootsteps } from '../scenes/footsteps'
+import { isGrass } from '../engine/firstPerson'
 
 export interface PlayerActions { reset: () => void; press: (key: string, down: boolean) => void }
 
@@ -72,12 +74,16 @@ export function CharacterController({ selected, paused, actionsRef, interaction 
     return () => { actionsRef.current = null; controls?.removeEventListener('controlend', remember) }
   }, [actionsRef, cameraColliders])
   useEffect(() => () => cameraColliders.forEach((mesh) => { mesh.geometry.dispose(); (mesh.material as THREE.Material).dispose() }), [cameraColliders])
+  // Footsteps at real footfalls (cadence from planar speed, grounded only, land on the grounded edge).
+  const gait = useRef({ speed: 0, grounded: true, x: 0, z: 0 })
+  useFootsteps({ getSpeed: () => gait.current.speed, getGrounded: () => gait.current.grounded, getSurface: () => (isGrass(gait.current.x, gait.current.z) ? 'grass' : 'concrete'), muted: paused })
   useFrame((_, delta) => {
     const actor = body.current
     if (!actor?.body) return
     const held = keys.current
     actor.setMovement({ forward: !paused && (held.has('KeyW') || held.has('ArrowUp')), backward: !paused && (held.has('KeyS') || held.has('ArrowDown')), leftward: !paused && (held.has('KeyA') || held.has('ArrowLeft')), rightward: !paused && (held.has('KeyD') || held.has('ArrowRight')), run: !paused && (held.has('ShiftLeft') || held.has('ShiftRight')), jump: !paused && held.has('Space') })
     const p = actor.body.translation()
+    { const v = actor.body.linvel(); gait.current.speed = Math.hypot(v.x, v.z); gait.current.grounded = actor.isOnGround; gait.current.x = p.x; gait.current.z = p.z }
     const controls = orbit.current
     controls?.moveTo(p.x, p.y + CAMERA_TARGET_OFFSET_Y, p.z, true)
     interaction.current.player.set(p.x, p.z)
