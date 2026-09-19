@@ -8,7 +8,7 @@ import { Play } from './scenes/Play'
 import { Result } from './scenes/Result'
 import { useGame } from './state/gameStore'
 import { useRun } from './state/runStore'
-import { VoiceButton, getLiveClient, initTts, stageInit, ttsSetMuted, ttsVoiceReport } from './voice'
+import { VoiceButton, getLiveClient, initCommandEar, initTts, stageInit, ttsSetMuted, ttsVoiceReport } from './voice'
 
 export default function App() {
   const screen = useGame((s) => s.screen)
@@ -19,8 +19,9 @@ export default function App() {
   useEffect(() => {
     const offTts = initTts() // voice-list warmup
     const offStage = stageInit()
+    const offEar = initCommandEar() // local always-on command ear; runs while the live session is connected
     ;(window as unknown as { runwayVoices?: () => Record<string, string> }).runwayVoices = ttsVoiceReport
-    return () => { offStage(); offTts() }
+    return () => { offEar(); offStage(); offTts() }
   }, [])
 
   // Voice (Lane V) → same validated path as buttons. The Play scene consumes runStore.voiceRequest.

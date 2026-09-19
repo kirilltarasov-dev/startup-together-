@@ -41,7 +41,7 @@ VAD/turn-detection field. `model`, `instructions`, and `audio` are **immutable a
 - Tool call arrives as a `response.event` envelope; dispatch on `event.event.type ===
   "response.output_item.done"` where the item has `type: "function_call"`, `call_id`, `name`,
   `arguments`. Reply with `response.item.create` `{ type: "function_call_output", call_id,
-  output }` then `response.create` so the voice can react.
+  output }`. Do not send `response.create`: the scripted reaction line plays instead and the live voice stays quiet until the player speaks again.
 - The client validates `eventId`/`choiceId` against the active event and dispatches the same
   store action as a button click (`dispatchVoiceChoice` in `voiceBridge.ts`). Anything else
   the model says is shown as a caption (from `session.output_transcript.delta`) and does nothing.

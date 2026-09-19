@@ -1,7 +1,8 @@
 // Browser speech synthesis for SCRIPTED founder lines, one distinct voice per character.
 // GPT-Live (Azure) is locked to a single voice per session, so live conversation is Sergio /
 // the Investor only; Sadman and Kirill are heard through these local voices. Free, no backend.
-// Accent is best-effort: an es-* voice reading English gives a Spanish-accented delivery, etc.
+// ENGLISH VOICES ONLY: a ru-*/es-* system voice reading English text was unintelligible over the
+// demo speakers, so character colour comes from en-* locale + pitch/rate, never from a foreign voice.
 // Sequencing (one speaker at a time) lives in stageManager.ts; this module plays ONE line.
 
 type Who = 'kirill' | 'sadman' | 'sergio' | 'investor' | string
@@ -18,8 +19,10 @@ interface Profile {
 
 const PROFILES: Record<string, Profile> = {
   sadman: { langs: ['en-IN'], fallbackLangs: ['en-GB', 'en'], pitch: 0.95, rate: 1.05, primaryNeedsRanked: true, fallback: { pitch: 0.85, rate: 0.97 } },
-  kirill: { langs: ['ru-RU', 'ru'], fallbackLangs: ['en-GB', 'en'], pitch: 0.8, rate: 0.98 },
-  sergio: { langs: ['es-CO', 'es-MX', 'es-US', 'es-419', 'es-ES', 'es'], fallbackLangs: ['en-US', 'en'], pitch: 1.1, rate: 1.15 },
+  // Kirill: never ru-*. Deep, slower English.
+  kirill: { langs: ['en-GB', 'en-AU'], fallbackLangs: ['en'], pitch: 0.78, rate: 0.95 },
+  // Sergio: TTS fallback only (live voice when a session is up). Never es-*. Bright, quick English.
+  sergio: { langs: ['en-US', 'en'], fallbackLangs: ['en'], pitch: 1.08, rate: 1.12 },
   investor: { langs: ['en-GB'], fallbackLangs: ['en'], pitch: 0.9, rate: 0.95 },
 }
 
@@ -67,8 +70,10 @@ function resolve(who: Who): { voice: SpeechSynthesisVoice | null; rule: string; 
   let hit = bestForLangs(voices, p.langs, !!p.primaryNeedsRanked)
   let rule = hit ? `primary ${hit.lang}` : ''
   if (!hit) { hit = bestForLangs(voices, p.fallbackLangs, false); rule = hit ? `fallback ${hit.lang}` : '' }
-  let voice = hit?.voice ?? null
-  if (!voice) { voice = voices.find((x) => x.default) ?? voices[0] ?? null; rule = 'fallback any' }
+  const voice = hit?.voice ?? null
+  // No English voice installed at all: leave `voice` unset and let the engine pick for lang en-US
+  // (never fall back to an arbitrary foreign-language voice reading English).
+  if (!voice) rule = 'fallback engine default (en-US)'
   voiceCache.set(key, { voice, rule })
   const tuned = rule.startsWith('fallback') && p.fallback ? p.fallback : { pitch: p.pitch, rate: p.rate }
   return { voice, rule, ...tuned }
@@ -80,7 +85,8 @@ export function speakLine(who: string, text: string): Promise<void> {
   return new Promise<void>((done) => {
     const r = resolve(who)
     const u = new SpeechSynthesisUtterance(text)
-    if (r.voice) { u.voice = r.voice; u.lang = r.voice.lang }
+    // u.lang always follows the chosen voice (English only); en-US when no voice object was resolved.
+    if (r.voice) { u.voice = r.voice; u.lang = r.voice.lang } else u.lang = 'en-US'
     u.pitch = r.pitch
     u.rate = r.rate
     u.volume = 1
