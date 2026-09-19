@@ -1,7 +1,16 @@
 // Stage manager: the ONE serialized speech queue for RUNWAY. One speaker at a time.
 // Sole subscriber of voiceBridge.subscribeSpeak. Routes each scripted line to the live Azure
 // voice (Sergio / Investor when a session is up) or to local TTS (tts.ts), waits for it to finish,
-// and yields to the player (barge-in) and to the live model (never talk over it).
+// and never talks over the live model.
+//
+// It also owns the CONVERSATION FLOOR (exactly one holder) and the mic-to-Azure policy that
+// follows from it. The demo runs over laptop speakers, so echo is solved here, in code:
+//   narrating   a scripted line (TTS or sayAsLive) is playing            -> mic to Azure CLOSED
+//   processing  a choose is in flight (client.isChooseInFlight())        -> mic CLOSED
+//   live_reply  Sergio is answering (live audio energy, no scripted line) -> mic OPEN (Azure AEC handles its own output)
+//   listening   default                                                   -> mic OPEN
+// The user's Mute always wins (liveClient.applyMic). Barge-in comes ONLY from the echo-filtered
+// local ear (commandEar.ts -> stageCut) and from clicks/keys; never from Azure's input transcript.
 
 import { subscribeSpeak, type SpeakPayload } from '../state/voiceBridge'
 import { getLiveClient } from './voiceSession'
@@ -14,6 +23,8 @@ const WAIT_LIVE_SPEAKING_MAX_MS = 5000
 const WAIT_CHOOSE_MAX_MS = 20_000
 const POLL_MS = 100
 
+export type Floor = 'narrating' | 'listening' | 'live_reply' | 'processing'
+
 type Line = { who: string; text: string }
 interface Job { tag: string; lines: Line[] }
 
@@ -23,9 +34,45 @@ let current: Job | null = null
 let running = false
 const consumed = new Set<string>()
 let unsubSpeak: (() => void) | null = null
-let unsubBarge: (() => void) | null = null
+let floorTimer: ReturnType<typeof setInterval> | null = null
 /** Bumped by stageReset so an in-flight runner abandons its loop. */
 let generation = 0
+
+// ---- floor ----
+let floor: Floor = 'listening'
+const floorListeners = new Set<(f: Floor) => void>()
+/** True from the start of playLine until the line's audio is done (drives 'narrating'). */
+let narratingLine = false
+/**
+ * Echo-filter reference for commandEar: the scripted line playing right now, or the last line
+ * handed to the live voice (its audio lags the request by 1-2 s, so it stays after resolve).
+ */
+let speakingText = ''
+
+export function getFloor(): Floor { return floor }
+export function subscribeFloor(cb: (f: Floor) => void): () => void {
+  floorListeners.add(cb)
+  cb(floor)
+  return () => { floorListeners.delete(cb) }
+}
+export function getCurrentlySpeakingText(): string { return speakingText }
+
+const setFloor = (f: Floor) => {
+  // Mic policy is applied on every tick (setMicHold is idempotent) so a reconnect picks it up.
+  getLiveClient().setMicHold(f === 'narrating' || f === 'processing')
+  if (f === floor) return
+  floor = f
+  floorListeners.forEach((l) => { try { l(f) } catch (e) { console.warn('[voice] floor listener threw', e) } })
+}
+
+/** Exactly one holder, priority order: narrating > processing > live_reply > listening. */
+function recomputeFloor(): void {
+  const client = getLiveClient()
+  if (narratingLine) setFloor('narrating')
+  else if (client.isChooseInFlight()) setFloor('processing')
+  else if (client.isLiveSpeaking()) setFloor('live_reply')
+  else setFloor('listening')
+}
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
@@ -34,20 +81,25 @@ async function waitUntil(ok: () => boolean, maxMs: number): Promise<void> {
   while (!ok() && performance.now() < until) await sleep(POLL_MS)
 }
 
-/** Live voice if a session is up (Sergio / Investor), else per-character local TTS. */
+/** Live voice if a session is up (Sergio / Investor), else per-character local TTS. Holds the floor as 'narrating'. */
 async function playLine(line: Line): Promise<void> {
   const client = getLiveClient()
-  if (line.who === 'sergio' || line.who === 'investor') {
-    if (await client.sayAsLive(line.text)) return
-  }
-  if (ttsIsMuted()) return
-  // Close the mic while the speakers play a founder line; otherwise the live model hears it as the player.
-  client.setMicHold(true)
+  narratingLine = true
+  speakingText = line.text
+  recomputeFloor() // closes the mic BEFORE any audio starts
+  let viaLive = false
   try {
+    if (line.who === 'sergio' || line.who === 'investor') {
+      viaLive = await client.sayAsLive(line.text)
+      if (viaLive) return
+    }
+    if (ttsIsMuted()) return
     await speakLine(line.who, line.text)
-    await sleep(MIC_RELEASE_MS)
+    await sleep(MIC_RELEASE_MS) // speaker tail
   } finally {
-    client.setMicHold(false)
+    narratingLine = false
+    if (!viaLive) speakingText = '' // live lines keep their text: the audio may still be in flight
+    recomputeFloor()
   }
 }
 
@@ -61,9 +113,9 @@ async function run(): Promise<void> {
       while (current.lines.length && gen === generation) {
         const line = current.lines.shift()!
         const client = getLiveClient()
-        // Gate: never start a line while the live voice is talking or a choose is being routed.
+        // Gate: never start a line while a choose is being routed or the live voice's audio is playing.
         await waitUntil(() => !client.isChooseInFlight(), WAIT_CHOOSE_MAX_MS)
-        await waitUntil(() => !client.isSpeaking(), WAIT_LIVE_SPEAKING_MAX_MS)
+        await waitUntil(() => !client.isLiveSpeaking(), WAIT_LIVE_SPEAKING_MAX_MS)
         if (gen !== generation) break
         await playLine(line)
         if (current.lines.length || queue.length) await sleep(GAP_MS)
@@ -95,21 +147,26 @@ function onPayload(p: SpeakPayload): void {
   void run()
 }
 
-/** Barge-in: the player started a new turn. Cut the current line, drop the rest of its tag. */
-function onPlayerSpeech(): void {
-  if (!current) return
-  current.lines.length = 0 // tag already in `consumed`
+/**
+ * Barge-in / skip: cut the current scripted line and drop the rest of its tag. Called by the
+ * echo-filtered local ear (commandEar) and by UI actions. Returns true if anything was cut.
+ * A live (sayAsLive) line cannot be stopped mid-air; its remaining tag lines are still dropped.
+ */
+export function stageCut(): boolean {
+  const had = !!current && (current.lines.length > 0 || narratingLine)
+  if (current) current.lines.length = 0 // tag already in `consumed`
   ttsCancel() // resolves the pending speakLine via onerror/onend
+  return had
 }
 
 /** Wire the stage manager once at app start. Returns unsubscribe. */
 export function stageInit(): () => void {
   if (unsubSpeak) return () => {}
   unsubSpeak = subscribeSpeak(onPayload)
-  unsubBarge = getLiveClient().onPlayerSpeech(onPlayerSpeech)
+  floorTimer = setInterval(recomputeFloor, POLL_MS)
   return () => {
     unsubSpeak?.(); unsubSpeak = null
-    unsubBarge?.(); unsubBarge = null
+    if (floorTimer) { clearInterval(floorTimer); floorTimer = null }
   }
 }
 
@@ -119,5 +176,6 @@ export function stageReset(): void {
   queue.length = 0
   if (current) current.lines.length = 0
   consumed.clear()
+  speakingText = ''
   ttsReset()
 }

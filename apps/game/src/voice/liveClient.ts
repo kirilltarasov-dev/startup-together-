@@ -10,6 +10,7 @@ import {
   type SpeakPayload,
   type VoiceContext,
 } from '../state/voiceBridge'
+import { matchChoice } from './choiceMatch'
 
 export type VoiceStatus = 'idle' | 'connecting' | 'listening' | 'speaking' | 'unavailable'
 
@@ -31,14 +32,23 @@ export interface LiveClient {
   subscribe(cb: (s: VoiceState) => void): () => void
   /** Quiet SCENE SO FAR context (session.thinking.append), once per tag. Buffered (latest only) before session.started. */
   noteScene(payload: SpeakPayload): void
-  /** Ask the live voice to say `text` verbatim. Resolves true once it has spoken (or after 7 s); false if no session. */
+  /** Ask the live voice to say `text` verbatim. Resolves true once its audio has played (or after 8 s); false if no session. */
   sayAsLive(text: string): Promise<boolean>
+  /** UI status is 'speaking' (transcript/energy driven). Prefer isLiveSpeaking() for sequencing. */
   isSpeaking(): boolean
+  /** Real audio energy on the remote track (400 ms hangover); transcript heuristic if AudioContext is unavailable. */
+  isLiveSpeaking(): boolean
   isChooseInFlight(): boolean
-  /** Close/open the mic around local TTS playback (independent of the user's Mute). */
+  /** Close/open the mic to Azure (floor policy, independent of the user's Mute). */
   setMicHold(hold: boolean): void
-  /** Fires on the first input transcript delta after >= 1.5 s of silence (a new player turn). */
-  onPlayerSpeech(cb: () => void): () => void
+  /** Event dedupe shared by all ears (Azure choose, transcript fallback, local command ear). */
+  isResolved(eventId: string): boolean
+  markResolved(eventId: string): void
+  /**
+   * A choice for `eventId` was dispatched outside the Azure tool path (local ear / fallback):
+   * mark it resolved and tell the live model to stay silent (the scripted reaction plays instead).
+   */
+  noteExternalChoice(eventId: string, choiceId: string): void
 }
 
 /**
@@ -60,25 +70,17 @@ const SPEAK_CAP_CHARS = 1800
 const CHOOSE_INFLIGHT_MAX_MS = 20_000
 /** Scripted lines go to the live model as QUIET context (the game plays them itself via tts.ts). */
 const SPEAK_PREFIX = 'SCENE SO FAR (already spoken aloud by the game; do not repeat these lines):\n'
-/** sayAsLive: give up waiting for speaking -> listening after this long. */
-const SAY_LIVE_MAX_MS = 7000
-/** A new player turn = first input transcript delta after this much input silence. */
-const PLAYER_TURN_GAP_MS = 1500
+/** sayAsLive: give up waiting for the live audio to play and stop after this long. */
+const SAY_LIVE_MAX_MS = 8000
 /** Transcript fallback: if the player clearly named a choice and no choose arrives, dispatch locally. */
 const TRANSCRIPT_SETTLE_MS = 1400
-const CHOICE_SYNONYMS: Record<string, string[]> = {
-  focused: ['founders only', 'founder only', 'founders', 'focused', 'small', 'niche'],
-  broad: ['everyone', 'everybody', 'anyone', 'broad', 'pitch', 'wide', 'open it up'],
-  careful: ['test', 'tests', 'careful', 'check', 'qa', 'verify', 'slow down'],
-  rush: ['ship', 'tonight', 'rush', 'launch now', 'yolo', 'send it', 'go live'],
-  celebrate: ['dinner', 'celebrate', 'party', 'treat', 'buy the team'],
-  save: ['save', 'forint', 'frugal', 'keep the money', 'noodles', 'cheap'],
-  send_devin: ['devin', 'send devin', 'fix it', 'fix the feed', 'engineer', 'call devin'],
-  disable_feed: ['disable', 'turn off', 'kill the feed', 'shut it', 'switch off', 'take it down'],
-  accept: ['accept', 'take the', 'take it', 'deal', 'yes to the', 'sign', 'bridge'],
-  decline: ['decline', 'no deal', 'independent', 'walk away', 'pass', 'reject', 'refuse'],
-  continue: ['continue', 'next', 'go on', 'move on', 'keep going', 'lets go', 'let s go', 'carry on', 'proceed', 'okay go', 'onwards', 'next scene'],
-}
+/** Remote-track RMS (time-domain, 0..1) above which the live voice counts as speaking. Tune here. */
+const LIVE_RMS_THRESHOLD = 0.015
+/** Keep "speaking" this long after the last loud frame (pauses between words, 100 ms poll jitter). */
+const LIVE_HANGOVER_MS = 400
+const LIVE_POLL_MS = 100
+/** Message appended when a choice was applied outside the Azure tool path (local ear / fallback). */
+const SILENT_AFTER_CHOICE = (choiceId: string) => `The player already chose "${choiceId}". Stay silent unless the player speaks to you again.`
 
 let eventCounter = 0
 const nextEventId = () => `evt_${Date.now().toString(36)}_${(++eventCounter).toString(36)}`
@@ -146,9 +148,13 @@ export function createLiveClient(): LiveClient {
   let pendingSpeak: SpeakPayload | null = null
   let chooseInFlight = false
   let inflightTimer: ReturnType<typeof setTimeout> | null = null
-  /** performance.now() of the last input transcript delta (player-turn detection). */
-  let lastInputDeltaAt = 0
-  const playerSpeechListeners = new Set<() => void>()
+  // Real live-speech detection: AnalyserNode on the remote track (created once per connection in ontrack).
+  let audioCtx: AudioContext | null = null
+  let analyser: AnalyserNode | null = null
+  let energyTimer: ReturnType<typeof setInterval> | null = null
+  let liveAudioActive = false
+  /** performance.now() of the last frame above LIVE_RMS_THRESHOLD. */
+  let lastLoudAt = 0
 
   const set = (patch: Partial<VoiceState>) => {
     state = { ...state, ...patch }
@@ -156,6 +162,56 @@ export function createLiveClient(): LiveClient {
   }
 
   const active = () => !!pc && (state.status === 'connecting' || state.status === 'listening' || state.status === 'speaking')
+
+  const energyAvailable = () => analyser !== null
+  /** Speaking = loud frame within the hangover window. Falls back to the transcript-driven UI status. */
+  const isLiveSpeaking = () => energyAvailable()
+    ? liveAudioActive || performance.now() - lastLoudAt < LIVE_HANGOVER_MS
+    : state.status === 'speaking'
+
+  /** Start metering the remote track. Never throws; on failure we keep the transcript heuristic. */
+  const startEnergyMeter = (remote: MediaStream) => {
+    if (analyser || typeof window === 'undefined') return
+    const Ctor = (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext
+      ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!Ctor) { console.info('[voice] AudioContext unavailable; live speech detection uses transcript heuristic'); return }
+    try {
+      audioCtx = new Ctor()
+      const src = audioCtx.createMediaStreamSource(remote)
+      const an = audioCtx.createAnalyser()
+      an.fftSize = 512
+      src.connect(an) // analysis only: not connected to destination (the <audio> element plays the track)
+      analyser = an
+      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {})
+      const buf = new Float32Array(an.fftSize)
+      energyTimer = setInterval(() => {
+        if (!analyser) return
+        analyser.getFloatTimeDomainData(buf)
+        let sum = 0
+        for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
+        const rms = Math.sqrt(sum / buf.length)
+        const now = performance.now()
+        if (rms > LIVE_RMS_THRESHOLD) { lastLoudAt = now; liveAudioActive = true }
+        else if (now - lastLoudAt >= LIVE_HANGOVER_MS) liveAudioActive = false
+        // UI status follows real audio when the meter is available.
+        if (liveAudioActive && state.status === 'listening') set({ status: 'speaking' })
+        else if (!liveAudioActive && state.status === 'speaking') set({ status: 'listening' })
+      }, LIVE_POLL_MS)
+    } catch (e) {
+      console.warn('[voice] energy meter failed; using transcript heuristic', e)
+      analyser = null
+      try { audioCtx?.close() } catch { /* ignore */ }
+      audioCtx = null
+    }
+  }
+
+  const stopEnergyMeter = () => {
+    if (energyTimer) { clearInterval(energyTimer); energyTimer = null }
+    analyser = null
+    liveAudioActive = false
+    lastLoudAt = 0
+    if (audioCtx) { try { void audioCtx.close() } catch { /* ignore */ } audioCtx = null }
+  }
 
   const send = (payload: Record<string, unknown>): boolean => {
     try {
@@ -227,7 +283,11 @@ export function createLiveClient(): LiveClient {
     send({ type: 'session.thinking.append', delegation_id: null, content: SPEAK_PREFIX + capLines(p.text) })
   }
 
-  /** Have the live voice say one scripted line verbatim; resolves when it stops speaking (or 7 s). */
+  /**
+   * Have the live voice say one scripted line verbatim. Resolves when its AUDIO has played: energy
+   * went active at least once and then quiet for LIVE_HANGOVER_MS (or SAY_LIVE_MAX_MS). Without an
+   * AudioContext, falls back to the transcript-driven status (which leads the audio by 1-2 s).
+   */
   const sayAsLive = (text: string): Promise<boolean> => {
     if (!started || !dc || dc.readyState !== 'open') return Promise.resolve(false)
     const ok = send({
@@ -237,6 +297,20 @@ export function createLiveClient(): LiveClient {
       content: text,
     })
     if (!ok) return Promise.resolve(false)
+    if (energyAvailable()) {
+      return new Promise<boolean>((resolve) => {
+        let sawActive = false
+        const t0 = performance.now()
+        const iv = setInterval(() => {
+          const now = performance.now()
+          if (liveAudioActive) sawActive = true
+          const quietAfterSpeech = sawActive && !liveAudioActive && now - lastLoudAt >= LIVE_HANGOVER_MS
+          if (quietAfterSpeech || !started || !energyAvailable() || now - t0 >= SAY_LIVE_MAX_MS) {
+            clearInterval(iv); resolve(true)
+          }
+        }, LIVE_POLL_MS)
+      })
+    }
     return new Promise<boolean>((resolve) => {
       let sawSpeaking = false
       let off: (() => void) | null = null
@@ -256,29 +330,24 @@ export function createLiveClient(): LiveClient {
   let transcriptBuf = ''
   let transcriptTimer: ReturnType<typeof setTimeout> | null = null
 
-  const matchChoice = (text: string, ctx: VoiceContext): string | null => {
-    const t = ` ${text.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ')} `
-    const hits = new Set<string>()
-    for (const c of ctx.allowedChoices) {
-      const keys = [c.label.toLowerCase(), c.id.replace(/_/g, ' '), ...(CHOICE_SYNONYMS[c.id] ?? [])]
-      if (keys.some((k) => k && t.includes(` ${k} `) || (k.length > 5 && t.includes(k)))) hits.add(c.id)
-    }
-    return hits.size === 1 ? [...hits][0] : null
+  /** Shared with commandEar: a choice was applied outside the tool path -> silence the live model. */
+  const noteExternalChoice = (eventId: string, choiceId: string) => {
+    resolvedEvents.add(eventId)
+    transcriptBuf = ''
+    send({ type: 'session.instructions.append', delegation_id: null, content: SILENT_AFTER_CHOICE(choiceId) })
+    if (lastPushedText) sendDelegation(lastPushedText, 'none')
   }
 
   const tryTranscriptFallback = () => {
     const ctx = getVoiceContext()
     if (!ctx || resolvedEvents.has(ctx.eventId) || !transcriptBuf.trim()) return
-    const choiceId = matchChoice(transcriptBuf, ctx)
+    const choiceId = matchChoice(transcriptBuf, ctx.allowedChoices)
     if (!choiceId) return
+    const heard = transcriptBuf.trim()
     const ok = dispatchVoiceChoice(ctx.eventId, choiceId)
-    console.info('[voice] transcript fallback', { eventId: ctx.eventId, choiceId, ok, heard: transcriptBuf.trim() })
+    console.info('[voice] command', { source: 'fallback', eventId: ctx.eventId, choiceId, ok, heard })
     if (!ok) return
-    resolvedEvents.add(ctx.eventId)
-    transcriptBuf = ''
-    // Tell the live model the decision is already applied so it reacts instead of asking again.
-    send({ type: 'session.instructions.append', delegation_id: null, content: `The player's choice "${choiceId}" for ${ctx.eventId} is already applied by the game. React in one short in-character sentence. Do not ask again.` })
-    if (lastPushedText) sendDelegation(lastPushedText, 'none')
+    noteExternalChoice(ctx.eventId, choiceId)
   }
 
   const noteTranscript = (delta: string) => {
@@ -293,8 +362,9 @@ export function createLiveClient(): LiveClient {
     if (on) inflightTimer = setTimeout(() => { chooseInFlight = false }, CHOOSE_INFLIGHT_MAX_MS)
   }
 
+  /** Transcript-driven "speaking" UI status; only used when the energy meter is unavailable. */
   const markSpeaking = () => {
-    if (!active()) return
+    if (!active() || energyAvailable()) return
     if (state.status !== 'speaking') set({ status: 'speaking' })
     if (speakTimer) clearTimeout(speakTimer)
     speakTimer = setTimeout(() => { if (state.status === 'speaking') set({ status: 'listening' }) }, SPEAKING_SETTLE_MS)
@@ -309,15 +379,18 @@ export function createLiveClient(): LiveClient {
     let ok = false
     let output = 'rejected: illegal or stale choice'
     let eventId = ''
+    let choiceId = ''
     try {
       const args = JSON.parse(item.arguments ?? '{}') as { eventId?: string; choiceId?: string; constraint?: string }
       eventId = String(args.eventId ?? '')
+      choiceId = String(args.choiceId ?? '')
       if (resolvedEvents.has(eventId)) {
         output = 'already chosen for this event; do not call choose again'
         console.info('[voice] duplicate choose ignored', eventId)
       } else {
-        ok = dispatchVoiceChoice(eventId, String(args.choiceId ?? ''), typeof args.constraint === 'string' ? args.constraint : undefined)
+        ok = dispatchVoiceChoice(eventId, choiceId, typeof args.constraint === 'string' ? args.constraint : undefined)
         if (ok) { resolvedEvents.add(eventId); output = 'ok' } else console.warn('[voice] choose rejected', args)
+        console.info('[voice] command', { source: 'azure', eventId, choiceId, ok, heard: state.heard })
       }
     } catch (e) {
       console.warn('[voice] bad choose arguments', item.arguments, e)
@@ -328,10 +401,12 @@ export function createLiveClient(): LiveClient {
       type: 'response.item.create',
       item: { type: 'function_call_output', call_id: item.call_id, output },
     })
-    // Continuation must not be forced into another choose call: flip tool_choice to none
-    // (whole delegation object resent), then continue so the voice can react.
+    // Flip tool_choice to none (whole delegation object resent) so a continuation is never forced
+    // into another choose call. Deliberately NO `response.create` here: the game plays the SCRIPTED
+    // reaction line (engine.ts speakLines `<event>:reaction:<choice>`) through the stage manager; a
+    // live ad-lib on top of it was the talk-over heard over speakers. Sergio speaks again only when
+    // the player addresses him.
     if (lastPushedText) sendDelegation(lastPushedText, 'none')
-    send({ type: 'response.create' })
     // Choose is no longer in flight: the stage manager may resume scripted lines.
     setChooseInFlight(false)
   }
@@ -375,10 +450,8 @@ export function createLiveClient(): LiveClient {
       case 'session.input_transcript.delta': {
         const delta = typeof msg.delta === 'string' ? msg.delta : ''
         tLastHeard = performance.now(); tFirstReplyAfterHeard = 0
-        if (tLastHeard - lastInputDeltaAt >= PLAYER_TURN_GAP_MS) {
-          playerSpeechListeners.forEach((l) => { try { l() } catch (e) { console.warn('[voice] player-speech listener threw', e) } })
-        }
-        lastInputDeltaAt = tLastHeard
+        // No barge-in from this transcript: over speakers it carried echo of our own TTS / Sergio.
+        // Interruptions come from the echo-filtered local ear (commandEar.ts) and from clicks only.
         set({ heard: (state.heard + delta).slice(-200) })
         noteTranscript(delta)
         return
@@ -419,7 +492,7 @@ export function createLiveClient(): LiveClient {
     if (inflightTimer) { clearTimeout(inflightTimer); inflightTimer = null }
     chooseInFlight = false
     pendingSpeak = null
-    lastInputDeltaAt = 0
+    stopEnergyMeter()
     transcriptBuf = ''
     if (transcriptTimer) { clearTimeout(transcriptTimer); transcriptTimer = null }
     spokenTags.clear()
@@ -475,7 +548,10 @@ export function createLiveClient(): LiveClient {
       audioEl.style.display = 'none'
       document.body.appendChild(audioEl)
       localPc.ontrack = (ev) => {
-        if (audioEl) { audioEl.srcObject = ev.streams[0] ?? new MediaStream([ev.track]); audioEl.play().catch(() => {}) }
+        const remote = ev.streams[0] ?? new MediaStream([ev.track])
+        if (audioEl) { audioEl.srcObject = remote; audioEl.play().catch(() => {}) }
+        // connect() runs from the Talk click, so the AudioContext is allowed to run. Once per connection.
+        if (pc === localPc) startEnergyMeter(remote)
       }
       localPc.onconnectionstatechange = () => {
         const s = localPc.connectionState
@@ -538,7 +614,7 @@ export function createLiveClient(): LiveClient {
     applyMic()
   }
 
-  /** Temporarily close the mic while local TTS plays so the live model does not hear the founders through the speakers. */
+  /** Floor policy (stageManager): close the mic while scripted lines play or a choose is routed. */
   function setMicHold(hold: boolean) {
     if (micHeld === hold) return
     micHeld = hold
@@ -558,11 +634,11 @@ export function createLiveClient(): LiveClient {
     noteScene,
     sayAsLive,
     isSpeaking: () => state.status === 'speaking',
+    isLiveSpeaking,
     isChooseInFlight: () => chooseInFlight,
     setMicHold,
-    onPlayerSpeech(cb) {
-      playerSpeechListeners.add(cb)
-      return () => { playerSpeechListeners.delete(cb) }
-    },
+    isResolved: (eventId) => resolvedEvents.has(eventId),
+    markResolved: (eventId) => { resolvedEvents.add(eventId) },
+    noteExternalChoice,
   }
 }
