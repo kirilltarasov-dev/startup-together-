@@ -297,6 +297,54 @@ function KitchenCounter({ x, z }: { x: number; z: number }) {
   </group>
 }
 
+/**
+ * Facade module grid mirrored from ArchitecturalDetails.DetailedFacades (columns 0-9 left x=-9.5, 10-19 right
+ * x=9.5, 20-28 back z=17; floors at y=0.45+3f; wide/narrow choice by (column+floor)%3). Only used to place the
+ * night-time lit panes exactly over the recessed glass (module-local z=-0.17) of chosen windows.
+ */
+const FACADE_COLUMNS = [
+  ...[-1, 1].flatMap((side) => Array.from({ length: 10 }, (_, i) => ({ x: side * 9.5, z: -11.5 + i * 3, yaw: -side * Math.PI / 2 }))),
+  ...Array.from({ length: 9 }, (_, i) => ({ x: -12 + i * 3, z: 17, yaw: Math.PI })),
+]
+/** Lit apartments at 03:00: three above the roofline in the spawn frame, one on the far facade for the sky view. */
+const S2_LIT_WINDOWS: { column: number; floor: number; intensity: number }[] = [
+  { column: 1, floor: 2, intensity: 1.6 },
+  { column: 2, floor: 2, intensity: 1.2 },
+  { column: 11, floor: 2, intensity: 2.0 },
+  { column: 25, floor: 1, intensity: 1.4 },
+]
+
+function LitWindows() {
+  return <group name="lit-windows">
+    {S2_LIT_WINDOWS.map(({ column, floor, intensity }) => {
+      const placement = FACADE_COLUMNS[column]
+      const narrow = (column + floor) % 3 === 0
+      const [width, height, centerY] = narrow ? [1.26, 1.4, 1.35] : [1.92, 1.4, 1.47]
+      return <group key={`${column}/${floor}`} position={[placement.x, 0.45 + floor * 3, placement.z]} rotation={[0, placement.yaw, 0]}>
+        <mesh position={[0, centerY, -0.165]}>
+          <planeGeometry args={[width, height]} />
+          <meshStandardMaterial color="#3a2a18" emissive="#ffb877" emissiveIntensity={intensity} roughness={0.6} />
+        </mesh>
+        {/* Curtain edge: a darker strip so the pane is not a flat rectangle of light */}
+        <mesh position={[narrow ? -0.4 : -0.62, centerY, -0.16]}><planeGeometry args={[0.28, height]} /><meshStandardMaterial color="#6b4a2a" emissive="#c27a3c" emissiveIntensity={intensity * 0.35} roughness={0.9} /></mesh>
+      </group>
+    })}
+  </group>
+}
+
+/** Courtyard sodium lamp post right of the glass wall; the amber point light in SCENE_LIGHTING S2 sits in its head. */
+function StreetLamp({ position }: { position: Position }) {
+  return <group position={position}>
+    <mesh position={[0, 0.06, 0]} castShadow><cylinderGeometry args={[0.12, 0.14, 0.12, 12]} /><meshStandardMaterial color="#2b2f33" roughness={0.6} metalness={0.4} /></mesh>
+    <mesh position={[0, 1.55, 0]} castShadow><cylinderGeometry args={[0.045, 0.06, 3.0, 10]} /><meshStandardMaterial color="#2b2f33" roughness={0.6} metalness={0.4} /></mesh>
+    <group position={[0, 3.15, 0]}>
+      <mesh castShadow><cylinderGeometry args={[0.16, 0.22, 0.16, 12]} /><meshStandardMaterial color="#2b2f33" roughness={0.5} metalness={0.4} /></mesh>
+      <mesh position={[0, -0.082, 0]} rotation={[Math.PI / 2, 0, 0]}><circleGeometry args={[0.2, 16]} /><meshStandardMaterial color="#ffb066" emissive="#ff9a3c" emissiveIntensity={4} side={THREE.DoubleSide} /></mesh>
+      <mesh position={[0, -0.15, 0]}><sphereGeometry args={[0.085, 12, 10]} /><meshStandardMaterial color="#ffd9a0" emissive="#ffb066" emissiveIntensity={6} /></mesh>
+    </group>
+  </group>
+}
+
 function Curtain({ position, width, height, color }: { position: Position; width: number; height: number; color: string }) {
   const geometry = useDisposable(() => {
     const geometry = new THREE.PlaneGeometry(width, height, 24, 1)
@@ -487,6 +535,9 @@ function ApartmentDressing({ textures, mood }: { textures: Textures; mood: Mood 
     <Poster position={[-3.3, 1.95, -7.83]} lines={['2026', 'SEPT', 'OCT  NOV']} background="#f4f1e8" foreground="#2a2622" accent="#c43d3d" width={0.42} />
     <Poster position={[5.84, 1.75, -2.6]} rotation={[0, -Math.PI / 2, 0]} lines={['GYM', 'MEMBERSHIP', 'expired']} background="#d6d9d2" foreground="#2a2622" width={0.4} />
     <Scuff position={[0, 0.031, -2.15]} length={4.3} width={1.2} opacity={0.5} />
+    {/* 03:00 outside: a few lit apartments on the surrounding facades and the courtyard sodium lamp */}
+    <LitWindows />
+    <StreetLamp position={[7.4, 0, -2.5]} />
   </group>
 }
 

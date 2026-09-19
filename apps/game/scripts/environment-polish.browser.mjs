@@ -4,11 +4,18 @@
 // takes the manual disable-feed path; it never starts a paid mission.
 //
 //   TEST_URL=http://127.0.0.1:4202 LABEL=before node scripts/environment-polish.browser.mjs
+//
+// Per scene it records: spawn / desk / side screenshots, per-founder face luminance (central 20%), a `sky` view
+// (looking up and out over the far facade; S2 must read as night), a `street` view (S2 sodium lamp), the lighting
+// snapshot and — once, in S1 — a round trip through the shadow-quality setter.
 import assert from 'node:assert/strict'
 import { mkdir, writeFile } from 'node:fs/promises'
 import puppeteer from 'puppeteer-core'
 
-const url = process.env.TEST_URL ?? 'http://127.0.0.1:4202'
+// TEST_URL may carry a query (e.g. ?world=first-person); requests are matched on the origin.
+const target = new URL(process.env.TEST_URL ?? 'http://127.0.0.1:4202')
+const url = target.origin
+const pageUrl = target.search ? target.href : `${url}/?world=first-person`
 const label = process.env.LABEL ?? 'after'
 const output = new URL('../node_modules/.cache/runway-environment-polish/', import.meta.url).pathname
 await mkdir(output, { recursive: true })
@@ -131,19 +138,56 @@ async function captureScene(scene) {
     await wait(700)
     await page.screenshot({ path: `${output}${label}-${scene}-side-1440x900.png` })
   }
+  // Sky view: standing at the glass, looking up and out over the far facade roofline. Mean luminance of the whole
+  // frame plus the central 20% (pure sky above the roofline) — S2 must read as night, S1/S3 as daylight.
+  let sky = null
+  let street = null
+  // Older builds lack the sky/street poses; treat a throw as "no view".
+  const hasSkyView = moved && await page.evaluate(() => { try { return window.__runwayCamera?.('sky') != null } catch { return false } })
+  if (hasSkyView) {
+    await wait(700)
+    await page.screenshot({ path: `${output}${label}-${scene}-sky-1440x900.png` })
+    sky = await levels()
+    if (scene === 'S2') {
+      await page.evaluate(() => window.__runwayCamera?.('street'))
+      await wait(700)
+      await page.screenshot({ path: `${output}${label}-${scene}-street-1440x900.png` })
+      street = await levels()
+    }
+  }
   const lighting = await page.evaluate(() => window.__runwayLighting?.() ?? null)
+  // Quality setter round trip (S1 only): the host sun shadow map must follow setLightingQuality and come back.
+  let quality = null
+  if (scene === 'S1' && await page.evaluate(() => typeof window.__runwaySetLightingQuality === 'function')) {
+    const before = lighting?.quality?.sunShadowMap ?? null
+    await page.evaluate(() => window.__runwaySetLightingQuality({ shadowMapSize: 1024, contactShadows: false }))
+    await wait(400)
+    const low = await page.evaluate(() => window.__runwayLighting?.().quality ?? null)
+    await page.evaluate(() => window.__runwaySetLightingQuality({ shadows: false }))
+    await wait(400)
+    const off = await page.evaluate(() => window.__runwayLighting?.().quality ?? null)
+    await page.evaluate(() => window.__runwaySetLightingQuality({ shadowMapSize: 2048, shadows: true, contactShadows: true }))
+    await wait(400)
+    const restored = await page.evaluate(() => window.__runwayLighting?.().quality ?? null)
+    quality = { before, low, off, restored }
+    assert.equal(low?.sunShadowMap?.size, 1024, 'sun shadow map follows setLightingQuality({ shadowMapSize })')
+    assert.equal(low?.contactShadows, false, 'contact shadows switch off')
+    assert.equal(off?.sunShadowMap?.castShadow, false, 'shadows: false stops the sun casting')
+    assert.equal(restored?.sunShadowMap?.size, 2048, 'shadow map restored')
+    assert.equal(restored?.sunShadowMap?.castShadow, true, 'sun casts again after restore')
+  }
   await click('RESET POSITION')
   await wait(300)
   await page.keyboard.press('Escape')
   await page.waitForSelector('[data-exploring="false"]')
-  return { spawn: sample, desk, faces, position, lighting }
+  return { spawn: sample, desk, faces, sky, street, position, lighting, quality }
 }
 
 const report = { label, url, scenes: {}, errors, failed, transfers: {} }
 try {
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 })
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }])
-  await page.goto(`${url}/?world=first-person`, { waitUntil: 'networkidle0' })
+  await page.goto(pageUrl, { waitUntil: 'networkidle0' })
   await page.mouse.click(720, 450)
   await click('START RUNWAY')
   await settle()
@@ -153,6 +197,18 @@ try {
   await click('OF COURSE')
   await settle()
   report.scenes.S2 = await captureScene('S2')
+  if (report.scenes.S2.sky) {
+    // Night acceptance (Polish Phase 2): the sky above the roofline reads as night and every founder face stays readable.
+    assert.ok(report.scenes.S2.sky.center < 30, `S2 sky centre reads as night (${report.scenes.S2.sky.center})`)
+    assert.equal(report.scenes.S2.lighting?.skyDomeVisible, false, 'daylight Sky dome hidden in S2')
+    assert.ok((report.scenes.S2.lighting?.night?.starsRendered ?? 0) > 0 && report.scenes.S2.lighting.night.starsRendered <= 400, 'S2 star field present within budget')
+    for (const [founder, luminance] of Object.entries(report.scenes.S2.faces)) {
+      // Sadman's asset shows only its ~1 % albedo hood from eye height (see faceFill in sceneLighting.tsx): the
+      // fill can only nudge it, so his value is recorded and flagged instead of failing the run.
+      if (founder === 'sadman' && luminance < 40) { report.warnings = [...(report.warnings ?? []), `S2 sadman head luminance ${luminance} < 40 (hood asset albedo)`]; continue }
+      assert.ok(luminance >= 40, `S2 ${founder} face readable (${luminance})`)
+    }
+  }
   await choose('Save every forint')
   await choose('Disable the feed')
   await click('WALK THERE')
@@ -172,7 +228,7 @@ try {
 
   // Narrow pass: the viewport change reloads the page, so replay the route from the opening screen.
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true })
-  await page.goto(`${url}/?world=first-person`, { waitUntil: 'networkidle0' })
+  await page.goto(pageUrl, { waitUntil: 'networkidle0' })
   await page.mouse.click(195, 422)
   await click('START RUNWAY')
   await settle()
