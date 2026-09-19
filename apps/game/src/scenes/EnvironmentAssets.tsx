@@ -1,6 +1,7 @@
 import { Environment, useGLTF } from '@react-three/drei'
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
+import { applyWindToMaterial } from './wind'
 
 const ROOT = '/assets/environment/'
 
@@ -24,6 +25,10 @@ export function CourtyardTree({ x, z }: { x: number; z: number }) {
             material.side = THREE.DoubleSide
             material.transparent = false
             material.alphaTest = 0.45
+            // Shared wind (same gusts as the grass); leaf primitive local y range 1.46..4.55 (from the GLB).
+            const { depthMaterial } = applyWindToMaterial(material, { stiffness: 0.35, heightRange: [1.4, 4.6], amplitude: 0.18 })
+            object.customDepthMaterial = depthMaterial
+            materials.push(depthMaterial)
           }
         }
         materials.push(material)

@@ -7,6 +7,7 @@ import type { FounderId, SceneId } from '../state/types'
 import type { Mood } from '../components/World'
 import { SceneEnvironment } from '../scenes/SceneEnvironment'
 import { InteractiveGrass, type GrassInteraction } from '../scenes/InteractiveGrass'
+import { Birds } from '../scenes/Birds'
 import { MATERIAL as M } from '../scenes/sceneMaterials'
 import { CharacterController, type PlayerActions } from '../characters/CharacterController'
 import type { CharacterId } from '../characters/CharacterCustomization'
@@ -24,6 +25,7 @@ export function ThirdPersonWorld({ scene, mood, active, paused, actionsRef, sele
     <Suspense fallback={null}><Environment files="/assets/environment/courtyard.hdr" environmentIntensity={0.7} /></Suspense>
     <SceneEnvironment scene={scene} mood={mood} active={active} reducedMotion={reducedMotion} />
     <InteractiveGrass interactionRef={interaction} reducedMotion={reducedMotion} />
+    <Birds visible={scene !== 'S2'} reducedMotion={reducedMotion} />
     <Suspense fallback={null}><CognitionSign /></Suspense>
     <Suspense fallback={<Html center><p className="rounded bg-panel p-4 text-white">Loading physics and character…</p></Html>}>
       <Physics timeStep={1 / 60} paused={paused}>
