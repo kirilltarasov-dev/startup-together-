@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets and local Vercel link - values live only in Vercel env vars, never in git
+.env
+.env.*
+!.env.example
+.vercel
