@@ -32,22 +32,32 @@ You also export from `apps/game/src/voice/index.ts`:
                       live caption of what the model said. Kirill mounts it inside the decision panel. Must render nothing harmful if the
                       session route is missing (show "Voice unavailable").
 
+PROVIDER: MICROSOFT AZURE FOUNDRY (not api.openai.com). Read docs/VOICE.md "Provider" section first; it has the audited
+endpoint, auth header, env var names, strict session schema, and exact event names. Docs:
+https://learn.microsoft.com/azure/foundry/openai/how-to/gpt-live , .../how-to/gpt-live-delegation , .../gpt-live-reference
+
 TASK 1 — Server route (target 13:15)
-- `apps/game/api/voice/session.ts` (Vercel Node function). Reads `OPENAI_API_KEY` (server-only, NOT VITE_).
-- Mints an ephemeral client secret for a gpt-live-1 session per the official Live API WebRTC quickstart
-  (https://developers.openai.com/api/docs/guides/live.md , https://developers.openai.com/api/docs/models/gpt-live-1.md).
-  Confirm the exact endpoint/body/tool-call event names against those docs BEFORE writing the client — do not guess.
-- Include in the session config: the base system prompt from VOICE.md verbatim, the `choose` tool definition from VOICE.md,
-  voice output enabled, English, server VAD. Max session length 10 minutes.
+- `apps/game/api/voice/session.ts` (Vercel Node function). Reads server-only env (NOT VITE_):
+  `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_LIVE_DEPLOYMENT`, `AZURE_RESPONSES_DEPLOYMENT`.
+- Accepts `{ sdp }` from the browser, POSTs `{ session, transport: { type: "webrtc", sdp } }` to
+  `${AZURE_OPENAI_ENDPOINT}/openai/v1/live/sessions` with header `api-key`, returns the JSON (session id + SDP answer) unchanged.
+- `session` = the exact body in VOICE.md "Session creation body": model = live deployment, base system prompt as `instructions`,
+  `audio.output.voice: "marin"`, `delegation.type: "responses"` with the `choose` function tool and `tool_choice: "required"`.
+  The schema is STRICT: do not add VAD, modalities, temperature, or any other field. Max session length 10 minutes (client-enforced).
 - Rate limit: max 3 sessions per IP per 10 minutes (in-memory Map is fine). Return 429 otherwise.
 - Test locally with `vercel dev` or by deploying a preview of `feat/voice`. `curl -X POST <preview>/api/voice/session` → token JSON.
 
 TASK 2 — Browser client `apps/game/src/voice/liveClient.ts`
 - On "Talk" click only: getUserMedia (mic), fetch `/api/voice/session`, open RTCPeerConnection + data channel per quickstart, attach remote audio.
-- On each `getVoiceContext()` change: send `session.update` with the `contextText` so the model only knows legal choices right now.
-- Handle the tool-call event: parse `{eventId, choiceId, constraint}`, sanitize `constraint` (strip newlines/backticks/URLs, cap 200 chars,
-  reject if it contains `rm `, `curl`, `sudo`, `git push`, `token`, `key`), then `dispatchVoiceChoice(...)`. Send the tool result back
-  ("ok" or "rejected: <reason>") so the model can react. Show model text as a caption; anything not a tool call does nothing.
+- Wait for `session.started` on the data channel before sending any command. Never send `session.start` over WebRTC.
+- On each `getVoiceContext()` change send BOTH: `session.instructions.append` `{ delegation_id: null, content: contextText }` and
+  `session.update` with the COMPLETE `delegation.responses` object (context in instructions + `choose` tool + `tool_choice: "required"`).
+- Tool call: listen for `response.event`; when `event.event.type === "response.output_item.done"` and the item is a `function_call`
+  named `choose`, parse `arguments` → `{eventId, choiceId, constraint}`, sanitize `constraint` (strip newlines/backticks/URLs, cap 200 chars,
+  reject `rm `, `curl`, `sudo`, `git push`, `token`, `key`), then `dispatchVoiceChoice(...)`. Reply with `response.item.create`
+  `{ type: "function_call_output", call_id, output: "ok" | "rejected: <reason>" }` then `response.create`.
+  Captions come from `session.output_transcript.delta`; anything that is not a `choose` call does nothing.
+- Close with `session.close` and wait for `session.closed`.
 - Denied mic / unsupported browser / fetch fail → badge "Voice unavailable", no crash, buttons still work.
 - Mute toggles the local audio track; Disconnect closes pc + tracks; also close on `getVoiceContext() === null` for >10 minutes.
 

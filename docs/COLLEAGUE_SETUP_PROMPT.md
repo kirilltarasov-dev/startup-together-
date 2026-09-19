@@ -17,7 +17,7 @@ CONTEXT
   tests, `benchmark/benchmark_feed.py`). Its `backend/feed.py` has an intentional N+1 / full-scan
   bottleneck. DO NOT FIX IT. Devin must do the repair during the game.
 - Hosting decision: Vercel = static frontend (`apps/game`, Vite) + a serverless route that holds
-  `OPENAI_API_KEY` for gpt-live-1 voice sessions. Railway = FastAPI orchestrator container that
+  the Azure Foundry key for gpt-live-1 voice sessions (we call gpt-live-1 through Microsoft Azure, not api.openai.com). Railway = FastAPI orchestrator container that
   holds `DEVIN_API_KEY` and serves `/api/missions`. Secrets stay server-side on each platform.
 
 TASK 1 - Connect THIS repo to Devin (decision 13:00: Devin works in the main repo, no throwaway) (5 min)
@@ -62,8 +62,13 @@ TASK 4 - Railway skeleton (10 min)
 TASK 5 - Vercel skeleton (10 min)
 1. Create a Vercel project from the main repo with root directory `apps/game` (framework Vite,
    build `npm run build`, output `dist`). Deploy `main` as-is (it is a starter page; fine).
-2. Set env vars: `OPENAI_API_KEY` (server-only, NOT prefixed VITE_), `ORCH_URL=<railway url>`,
-   `ORCH_TOKEN=<same as railway>`. Enable preview deployments for branches.
+2. Set env vars (server-only, NOT prefixed VITE_): `AZURE_OPENAI_ENDPOINT` (https://<resource>.openai.azure.com),
+   `AZURE_OPENAI_API_KEY`, `AZURE_LIVE_DEPLOYMENT` (name of the gpt-live-1 deployment), `AZURE_RESPONSES_DEPLOYMENT`
+   (name of the backend model deployment used for tool calls, e.g. gpt-5.5), `ORCH_URL=<railway url>`, `ORCH_TOKEN=<same as railway>`.
+   Confirm both deployments exist in the same Foundry resource. Enable preview deployments for branches.
+   Smoke test from your machine: `curl -s -o /dev/null -w "%{http_code}" -H "api-key: $AZURE_OPENAI_API_KEY" -H "content-type: application/json" \
+   -d '{"session":{"model":"<live deployment>"},"transport":{"type":"webrtc","sdp":"v=0"}}' "$AZURE_OPENAI_ENDPOINT/openai/v1/live/sessions"`
+   — anything other than 401/403/404 means the key, endpoint and deployment resolve (a 400 on the dummy SDP is fine).
 3. Report the production Vercel URL.
 
 TASK 6 - Check the Devin session (whenever Task 3 finishes)
