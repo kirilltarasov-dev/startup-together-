@@ -14,7 +14,7 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   const url = new URL(req.url)
-  const path = url.pathname.replace(/^\/api\/missions/, '') || '/'
+  const path = url.pathname.replace(/^\/api\/missions/, '')
   const target = `${orchUrl.replace(/\/$/, '')}/api/missions${path}${url.search}`
 
   const headers = new Headers()
