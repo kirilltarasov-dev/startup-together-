@@ -1,97 +1,79 @@
-export type FounderId = 'kirill' | 'rafi' | 'valentina'
+export type FounderId = 'kirill' | 'sadman' | 'sergio'
 
 export interface Founder {
   id: FounderId
   name: string
   role: string
   emoji: string
+  color: string
   morale: number
   stress: number
 }
 
-export type Stage = 'Hackathon' | 'Startup' | 'Funded' | 'Ended'
-export type Location = 'Budapest' | 'Debrecen' | 'Balaton'
+export type SceneId = 'S1' | 'S2' | 'S3'
+export type Location = 'Budapest' | 'Debrecen' | 'Investor room'
 
-export type Scene =
+export type Screen =
   | 'opening'
-  | 'idea'
-  | 'hackathon'
-  | 'judging'
-  | 'transition'
-  | 'startup'
-  | 'devin'
+  | 'play'      // S1/S2/S3 with events
+  | 'result'    // hackathon result interstitial
+  | 'devin'     // mission control (E04 send_devin)
   | 'ending'
-  | 'postcredit'
 
-export interface Idea {
-  id: string
-  company: string
-  tagline: string
-  market: string
-  competition: string
-  difficulty: string
-}
+/** Stable event ids from docs/SKIT.md */
+export type EventId = 'E01' | 'E02' | 'E03' | 'E04' | 'E05'
 
 export interface GameState {
-  scene: Scene
-  day: number
-  hackathonMinutesLeft: number
+  screen: Screen
+  scene: SceneId
   location: Location
-  stage: Stage
-  idea: Idea | null
+  day: number
+  eventIndex: number            // 0..4 → E01..E05
+  resolved: Partial<Record<EventId, string>>  // eventId → choiceId (each choice applies once)
 
   cash: number
-  revenue: number // per day
-  dailyBurn: number
   users: number
-  productHealth: number
-  technicalDebt: number
-  reputation: number
-  valuation: number
-  equity: { founders: number; investors: number }
+  health: number
+  morale: number
+  ownership: number             // founders' %
+  dailyBurn: number
   founders: Record<FounderId, Founder>
 
-  devinMissions: number
-  incidentsSurvived: number
-  shippedBroken: boolean
-  ending: string | null
-  log: string[]
+  missionOutcome: 'none' | 'success' | 'failure' | 'skipped'
+  missionMode: 'live' | 'cached' | 'mock' | null
+  missionEvidence: { tests: string; before: number; after: number } | null
+  runId: string
 }
 
-/** Partial numeric deltas applied to state. */
 export interface Effects {
   cash?: number
-  revenue?: number
-  dailyBurn?: number
   users?: number
-  productHealth?: number
-  technicalDebt?: number
-  reputation?: number
-  valuation?: number
-  investorEquity?: number
-  minutes?: number
-  days?: number
-  morale?: Partial<Record<FounderId | 'all', number>>
-  stress?: Partial<Record<FounderId | 'all', number>>
+  health?: number
+  morale?: number
+  ownership?: number            // absolute set, not delta
+  dailyBurn?: number            // absolute set
 }
 
 export interface Choice {
+  id: string
   label: string
   hint?: string
   effects?: Effects
-  engineeringMission?: string
-  outcome?: string
-  next?: string // force next event id
+  reaction?: Line
   kind?: 'devin' | 'danger' | 'money' | 'normal'
+  engineeringMission?: 'optimize_feed'
 }
 
+export interface Line { who: FounderId; text: string }
+
 export interface GameEvent {
-  id: string
-  phase: 'hackathon' | 'startup'
+  id: EventId
+  scene: SceneId
   icon: string
   title: string
-  description: string
-  speaker?: FounderId | 'system' | 'judge' | 'investor'
+  prompt?: string               // voice prompt, e.g. "Say what we're building."
+  dialogue: Line[]
   choices: Choice[]
-  once?: boolean
+  voice?: boolean
+  onEnter?: Effects
 }
