@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Environment, Lightformer, Sky } from '@react-three/drei'
-import { useEffect, useImperativeHandle, useMemo, useRef, type RefObject } from 'react'
+import { Suspense, useEffect, useImperativeHandle, useMemo, useRef, type RefObject } from 'react'
 import * as THREE from 'three'
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js'
 import type { FounderId, SceneId } from '../state/types'
@@ -9,6 +9,8 @@ import { grassTarget, isGrass, movePlayer } from '../engine/firstPerson'
 import { InteractiveGrass, type GrassInteraction } from './InteractiveGrass'
 import { SceneEnvironment } from './SceneEnvironment'
 import { MATERIAL as M } from './sceneMaterials'
+import { CourtyardLighting } from './EnvironmentAssets'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
 export interface FirstPersonHandle {
   enter: (lock?: boolean) => void
@@ -190,8 +192,12 @@ function Player({ controlsRef, interactionRef, hintRef, onExploreChange, onContr
 
 export function FirstPersonWorld({ scene, mood, active, controlsRef, hintRef, onExploreChange, onControlError, reducedMotion }: Omit<ControllerProps, 'interactionRef'> & { scene: SceneId | 'devin'; mood: Mood; active?: FounderId }) {
   const interactionRef = useRef<GrassInteraction>({ player: new THREE.Vector2(0, 5.2), brush: new THREE.Vector2(0, 5.2), strength: 0, brushing: false })
+  const fallbackLighting = <Environment resolution={64} frames={1}>
+    <Lightformer form="rect" intensity={1.4} color={M.ambient} scale={[30, 30, 1]} position={[0, 15, 0]} rotation={[Math.PI / 2, 0, 0]} />
+    <Lightformer form="rect" intensity={2} color={M.sun} scale={[12, 12, 1]} position={[-10, 8, 8]} target={[0, 0, 0]} />
+  </Environment>
   return <Canvas
-    shadows
+    shadows="soft"
     dpr={[1, 1.5]}
     camera={{ position: [0, 1.65, 5.2], fov: 68, near: 0.05, far: 100 }}
     gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
@@ -201,12 +207,9 @@ export function FirstPersonWorld({ scene, mood, active, controlsRef, hintRef, on
     <color attach="background" args={[M.sky]} />
     <fog attach="fog" args={[M.fog, 24, 75]} />
     <Sky distance={450000} sunPosition={[-9, 9, 5]} inclination={0.5} azimuth={0.25} turbidity={3.5} rayleigh={1.1} />
-    <hemisphereLight args={[M.ambient, M.ground, 2.1]} />
-    <directionalLight position={[-7, 10, 6]} color={M.sun} intensity={3.2} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-16} shadow-camera-right={16} shadow-camera-top={16} shadow-camera-bottom={-16} shadow-camera-near={0.5} shadow-camera-far={45} shadow-bias={-0.0004} shadow-normalBias={0.04} />
-    <Environment resolution={64} frames={1}>
-      <Lightformer form="rect" intensity={1.4} color={M.ambient} scale={[30, 30, 1]} position={[0, 15, 0]} rotation={[Math.PI / 2, 0, 0]} />
-      <Lightformer form="rect" intensity={2} color={M.sun} scale={[12, 12, 1]} position={[-10, 8, 8]} target={[0, 0, 0]} />
-    </Environment>
+    <hemisphereLight args={[M.ambient, M.ground, 0.55]} />
+    <directionalLight position={[-7, 10, 6]} color={M.sun} intensity={2.4} castShadow shadow-mapSize={[2048, 2048]} shadow-camera-left={-16} shadow-camera-right={16} shadow-camera-top={16} shadow-camera-bottom={-16} shadow-camera-near={0.5} shadow-camera-far={45} shadow-bias={-0.0003} shadow-normalBias={0.025} />
+    <ErrorBoundary label="Courtyard lighting" fallback={fallbackLighting}><Suspense fallback={fallbackLighting}><CourtyardLighting /></Suspense></ErrorBoundary>
     <SceneEnvironment scene={scene} mood={mood} active={active} reducedMotion={reducedMotion} />
     <InteractiveGrass interactionRef={interactionRef} reducedMotion={reducedMotion} />
     <Player controlsRef={controlsRef} interactionRef={interactionRef} hintRef={hintRef} onExploreChange={onExploreChange} onControlError={onControlError} reducedMotion={reducedMotion} />

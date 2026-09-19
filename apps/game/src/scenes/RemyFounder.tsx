@@ -5,8 +5,8 @@ import * as THREE from 'three'
 import { clone } from 'three/addons/utils/SkeletonUtils.js'
 import type { Mood } from '../components/World'
 
-export function RemyFounder({ x, active, mood, reducedMotion }: { x: number; active: boolean; mood: Mood; reducedMotion: boolean }) {
-  const { scene } = useGLTF('/assets/founders/remy-seated.glb')
+export function RemyFounder({ x, active, mood, reducedMotion, asset = 'remy' }: { x: number; active: boolean; mood: Mood; reducedMotion: boolean; asset?: 'remy' | 'sergio' }) {
+  const { scene } = useGLTF(`/assets/founders/${asset}-seated.glb`)
   const model = useMemo(() => {
     const root = clone(scene)
     const materials = new Set<THREE.Material>()
@@ -39,7 +39,7 @@ export function RemyFounder({ x, active, mood, reducedMotion }: { x: number; act
     model.head.quaternion.slerp(model.target, reducedMotion ? 1 : 1 - Math.exp(-4 * Math.min(delta, 0.1)))
   })
 
-  return <group position={[x, 0, -6.45]} name="remy-founder">
+  return <group position={[x, 0, -6.45]} name={`${asset}-founder`}>
     <primitive object={model.root} dispose={null} />
   </group>
 }

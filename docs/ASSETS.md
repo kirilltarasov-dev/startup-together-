@@ -1,5 +1,48 @@
 # Art assets — generate these NOW (Midjourney v7 / Flux / GPT-image)
 
+## Architecture and Furniture Replacement (VIS03, September 19, 2026)
+
+User authorized the grass session to take over environment/props and replace architecture/furniture while preserving the campaign, founder integration, lighting, tree and grass work. New runtime assets are self-contained GLBs under `apps/game/public/assets/realism/`. All source models are Poly Haven CC0 assets (https://polyhaven.com/license), downloaded via its public API with the RUNWAY user-agent and checksum verification; no paid service, account, asset upload or runtime external request is used.
+
+| Runtime file | Source / author | Export |
+| --- | --- | --- |
+| `facade-kit.glb` | https://polyhaven.com/a/modular_factory_facade — James Ray Cock | Selected wide/narrow window-wall assemblies, recessed door-wall, cornice and base. 6,950 source triangles across five reusable modules; 512px textures; 1,233,508 bytes. GPU instanced placements reuse these modules rather than importing the full 175K-triangle source layout. |
+| `school-chair.glb` | https://polyhaven.com/a/SchoolChair_01 — Ethan Place | 5,072 triangles, 1K textures, 483,764 bytes. Ground-centered and fitted to the existing chair footprint. |
+| `wooden-table.glb` | https://polyhaven.com/a/wooden_table_02 — Serhii Khromov | 196 triangles, 1K textures, 485,100 bytes. Three worktables occupy the original desk collider footprint. |
+
+Total new runtime GLBs: 2,202,372 bytes, before transfer compression. `sources.json` records upstream URLs/checksums; `exports.json` records exported hashes/budgets. Source glTF packages remain in ignored `node_modules/.cache/runway-realism-source/`. The first facade export failed its 6 MB budget test; reducing its background texture resolution produced the bounded export above, without relaxing the test. Added loft ducts/baseboards and small-prop bevels are local authored geometry, not externally acquired assets. This pass does not establish baked global illumination, full realistic character coverage or GTA VI-equivalent quality.
+
+Reproduce from `apps/game`: `python3 scripts/prepare-realism.py --direct` (process-local direct public downloads; persistent proxy settings unchanged), then `blender --background --factory-startup --python-exit-code 1 --python scripts/export-realism.py`. Existing exports are refused unless `-- --overwrite` is explicitly supplied. `node --test realismAssets.test.mjs` validates embedded assets, hashes, named facade modules and download/triangle budgets. Browser verification is `TEST_URL=http://127.0.0.1:4181 node scripts/realism.browser.mjs`; it captures facade/furniture/desktop/narrow views and tests all three asset-failure fallbacks. Separate production snapshot: `node_modules/.cache/runway-realism-build/`; capture/report folder: `node_modules/.cache/runway-realism/`.
+
+## Sergio Reference Model in Game (September 19, 2026)
+
+User explicitly requested placing the previously generated Sergio reference asset in the active game. The runtime format is a self-contained GLB, not an FBX or a PNG billboard: `apps/game/public/assets/founders/sergio-seated.glb` (6,527,072 bytes), with hash/pose evidence in `sergio-seated.json`. It replaces only the right-hand Sergio slot at x=1.8; Kirill's Remy asset and Sadman's fallback are preserved. `RemyFounder.tsx` accepts the limited `remy`/`sergio` asset variants, retaining independent skeleton/material clones, head reactions and reduced-motion behavior.
+
+Source: `/Users/QXZ6WEJ/Downloads/runway-sergio-reference/sergio-reference.blend`, SHA-256 `dabc28fc0d13d7c28c4f1cb463d217b2e81bc265425b781a111bbf98b0bd13e0`. It is the local Remy-derived adaptation of user-supplied `ChatGPT Image Sep 19, 2026, 01_55_43 PM.png` (reference SHA-256 `777b8a7dc38ee76fcccaff20dd8e459e34697cd0c899d50f1055425dc5be5159`), with the jacket projection, modeled sleeves/trousers, hat and accessories. Remy source/license evidence is recorded below; no new external asset/provider was used. Face remains the base model's approximation, not an exact recovered likeness.
+
+Conversion preserves 18 skinned meshes, 67 bones, reference outfit and morph data. A locally fitted static seated pose puts the hips at 0.63m and the model within z-up bounds 0.015m to 1.463m. Textures are capped at 1024 pixels; opaque images use JPEG quality 82 and alpha images retain PNG. Original Idle/Walk/Talking/facial clips remain in the untouched standalone exports; this in-game derivative intentionally contains no animation clips, so standing locomotion cannot override the seated pose. Source file hash is checked before/after export. Preview floor/cameras/lights are excluded.
+
+Reproduce from `apps/game`: `blender --background --disable-autoexec /path/to/sergio-reference.blend --python-exit-code 1 --python scripts/seat-sergio.py -- /absolute/output/sergio-seated.glb`. Existing output is refused unless `--overwrite` is explicitly supplied after the output path. No source image or standalone FBX/GLB/Blender export is overwritten.
+
+Verification: `node --test sergioAsset.test.mjs` checks GLB/hash, embedded assets, skinning, outfit mesh names, seated bounds, size budget and absence of standing animation. `TEST_URL=http://127.0.0.1:4177 node scripts/sergio.browser.mjs` captures front/side/narrow views and blocks only Sergio's GLB to check isolated fallback and movement. Evidence is under `node_modules/.cache/runway-sergio/`. The existing `character.browser.mjs` route hit a chair collider while repositioning; the Sergio-specific route stays outside the table/chair colliders rather than weakening collision rules. Full first-person story/touch regression also passes against the stable Sergio snapshot. Initial full-build errors in in-progress campaign code were resolved by that owner; the full typecheck/build then passed without changes to the campaign lane. No paid mission, live voice, publishing or deployment was performed for CHAR02.
+
+## CC0 Courtyard Environment Pass (September 19, 2026)
+
+VIS02 uses self-hosted Poly Haven assets under CC0: https://polyhaven.com/license. No paid service, runtime CDN or API dependency was added. The user approved process-local direct downloads after the configured proxy failed DNS resolution; persistent proxy settings were not changed.
+
+| Asset | Source | Runtime use / transformation |
+| --- | --- | --- |
+| Brick Wall 02, Dimitrios Savva | https://polyhaven.com/a/brick_wall_02 | 1K JPEG base color, OpenGL normal and roughness; physical two-metre repeat, separate sRGB color and linear data maps |
+| Concrete Pavement | https://polyhaven.com/a/concrete_pavement | 1K JPEG base color, OpenGL normal and roughness; two-metre repeat |
+| Urban Courtyard, Greg Zaal / Rico Cilliers | https://polyhaven.com/a/urban_courtyard | 1K HDR environment, lighting/reflections only; not presented as walkable scanned geometry |
+| Tree Small 02, Rico Cilliers | https://polyhaven.com/a/tree_small_02 | Blender LOD1 reduced from 495,533 to 64,938 triangles; images capped at 512 pixels; JPEG quality 82 with alpha retained where needed; embedded GLB, 7,999,608 bytes, reused at two placements; custom Blender leaf group replaced with standard PBR nodes and source-color-preserving RGBA cutouts |
+
+Runtime assets live in `apps/game/public/assets/environment/`. Six surface images plus HDR total 6,782,736 bytes; with the tree, 14,782,344 bytes before transfer compression. `sources.json` records download URLs, source checksums and CC0 license; `courtyard-tree.json` records export evidence/hash. Source Blender/textures remain in ignored `node_modules/.cache/runway-environment-source/`, not the served asset directory. No source Blender scripts are executed: conversion uses `--disable-autoexec` and the locally reviewed exporter.
+
+Reproduce from `apps/game`: `python3 scripts/prepare-environment.py` (add `--direct` only when direct access is approved), `node scripts/prepare-tree-textures.mjs` to combine the source color/alpha using the browser's sRGB image pipeline, then `blender --background --disable-autoexec node_modules/.cache/runway-environment-source/tree.blend --python-exit-code 1 --python scripts/optimize-environment-tree.py`. Export refuses an existing output unless explicitly passed `-- --overwrite`. Download preparation refuses mismatched existing files.
+
+New verification: `node --test environmentAssets.test.mjs` checks source hashes, distinct PBR channels, embedded tree assets and transfer/triangle budgets. `node scripts/environment.browser.mjs` checks all eight runtime requests and captures courtyard/tree views with frame-cadence evidence under `node_modules/.cache/runway-environment/`; `TEST_URL` selects development or production preview. Existing first-person browser regression remains required. Authored geometry, generated wood/soil, two primitive founder placeholders and the procedural brushing hand remain; this is not baked-GI or Unreal/Lumen rendering. Loading/error paths preserve procedural environment/tree/lighting fallbacks.
+
 ## First Imported Human: Remy (September 19, 2026)
 
 User-supplied source: `/Users/QXZ6WEJ/Downloads/Remy.fbx`, provided in response to the Mixamo export request. FBX metadata contains `mixamorig` bones and `Armature|mixamo.com|Layer0`. Source SHA-256: `ea53dc7a94cde370ede41484be58d41a2e7278e13324a390d160232a5421493d`. Original FBX remains unmodified and is not copied into the repository.

@@ -4,28 +4,35 @@ import * as THREE from 'three'
 import { FOUNDERS } from '../state/gameStore'
 import type { FounderId, SceneId } from '../state/types'
 import type { Mood } from '../components/World'
-import { MATERIAL as M, seededRandom, signTexture, surfaceTexture } from './sceneMaterials'
+import { MATERIAL as M, seededRandom, signTexture, surfaceTexture, useEnvironmentSurfaces, type Surface } from './sceneMaterials'
 import { RemyFounder } from './RemyFounder'
 import { ErrorBoundary } from '../components/ErrorBoundary'
+import { CourtyardTree } from './EnvironmentAssets'
+import { DetailedFacades, LoftDetails } from './ArchitecturalDetails'
+import { RealisticChair, RealisticDesks } from './RealisticFurniture'
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 
 type Position = [number, number, number]
 
-function Box({ position, size, color = M.metal, map, rotation, castShadow = true }: { position: Position; size: Position; color?: string; map?: THREE.Texture; rotation?: Position; castShadow?: boolean }) {
+function Box({ position, size, color = M.metal, surface, rotation, castShadow = true }: { position: Position; size: Position; color?: string; surface?: Surface; rotation?: Position; castShadow?: boolean }) {
   const [width, height, depth] = size
-  const brick = map?.userData.kind === 'brick'
+  const map = surface?.map
+  const [tileWidth, tileHeight] = surface?.meters ?? [2, 2]
   const geometry = useMemo(() => {
-    const geometry = new THREE.BoxGeometry(width, height, depth)
+    const geometry = Math.max(width, height, depth) < 3
+      ? new RoundedBoxGeometry(width, height, depth, 2, Math.min(0.018, width * 0.12, height * 0.12, depth * 0.12))
+      : new THREE.BoxGeometry(width, height, depth)
     const uv = geometry.attributes.uv
     const normal = geometry.attributes.normal
     for (let i = 0; i < uv.count; i++) {
       const u = Math.abs(normal.getX(i)) > 0.5 ? depth : width
       const v = Math.abs(normal.getY(i)) > 0.5 ? depth : height
-      uv.setXY(i, uv.getX(i) * u / (brick ? 1.1 : 2), uv.getY(i) * v / (brick ? 0.64 : 2))
+      uv.setXY(i, uv.getX(i) * u / tileWidth, uv.getY(i) * v / tileHeight)
     }
     return geometry
-  }, [width, height, depth, brick])
+  }, [width, height, depth, tileWidth, tileHeight])
   useEffect(() => () => geometry.dispose(), [geometry])
-  return <mesh position={position} rotation={rotation} geometry={geometry} castShadow={castShadow} receiveShadow><meshStandardMaterial color={map ? 'white' : color} map={map} bumpMap={map} bumpScale={brick ? 0.035 : 0.012} roughness={0.82} /></mesh>
+  return <mesh position={position} rotation={rotation} geometry={geometry} castShadow={castShadow} receiveShadow><meshStandardMaterial color={map ? 'white' : color} map={map} normalMap={surface?.normalMap} roughnessMap={surface?.roughnessMap} bumpMap={surface?.normalMap ? undefined : map} bumpScale={0.012} roughness={surface?.roughnessMap ? 1 : 0.82} /></mesh>
 }
 
 function Sign({ title, subtitle, position, width = 3.4, dark = false }: { title: string; subtitle: string; position: Position; width?: number; dark?: boolean }) {
@@ -35,6 +42,11 @@ function Sign({ title, subtitle, position, width = 3.4, dark = false }: { title:
 }
 
 function Chair({ x, z = -6.5 }: { x: number; z?: number }) {
+  const fallback = <FallbackChair x={x} z={z} />
+  return <ErrorBoundary label="Detailed chair" fallback={fallback}><Suspense fallback={fallback}><RealisticChair x={x} z={z} /></Suspense></ErrorBoundary>
+}
+
+function FallbackChair({ x, z = -6.5 }: { x: number; z?: number }) {
   return <group position={[x, 0, z]}>
     <Box position={[0, 0.52, 0]} size={[0.56, 0.1, 0.55]} />
     <Box position={[0, 0.94, -0.25]} size={[0.56, 0.72, 0.08]} />
@@ -104,48 +116,74 @@ function Tree({ x, z }: { x: number; z: number }) {
   return <group position={[x, 0, z]}>
     <mesh position={[0, 1.7, 0]} castShadow><cylinderGeometry args={[0.1, 0.24, 3.4, 10]} /><meshStandardMaterial color={M.bark} roughness={1} /></mesh>
     {[-1, 1].map((side) => <mesh key={side} position={[side * 0.45, 2.9, 0]} rotation={[0.2, 0, side * -0.6]} castShadow><cylinderGeometry args={[0.05, 0.12, 1.8, 8]} /><meshStandardMaterial color={M.bark} roughness={1} /></mesh>)}
-    <instancedMesh ref={canopy} args={[undefined, undefined, 160]} castShadow receiveShadow><icosahedronGeometry args={[1, 1]} /><meshStandardMaterial color={M.leaf} roughness={0.95} /></instancedMesh>
+    <instancedMesh ref={canopy} args={[undefined, undefined, 160]} castShadow receiveShadow><icosahedronGeometry args={[1, 1]} /><meshStandardMaterial roughness={0.95} /></instancedMesh>
   </group>
 }
 
-export function SceneEnvironment({ scene, mood, active, reducedMotion }: { scene: SceneId | 'devin'; mood: Mood; active?: FounderId; reducedMotion: boolean }) {
-  const textures = useMemo(() => ({ brick: surfaceTexture('brick'), wood: surfaceTexture('wood'), concrete: surfaceTexture('concrete'), soil: surfaceTexture('soil') }), [])
-  useEffect(() => () => Object.values(textures).forEach((texture) => texture.dispose()), [textures])
+type SceneProps = { scene: SceneId | 'devin'; mood: Mood; active?: FounderId; reducedMotion: boolean }
+
+export function SceneEnvironment(props: SceneProps) {
+  const fallback = <EnvironmentScene {...props} />
+  return <ErrorBoundary label="Environment surfaces" fallback={fallback}><Suspense fallback={fallback}><TexturedScene {...props} /></Suspense></ErrorBoundary>
+}
+
+function TexturedScene(props: SceneProps) {
+  const surfaces = useEnvironmentSurfaces()
+  return <EnvironmentScene {...props} surfaces={surfaces} />
+}
+
+function EnvironmentScene({ scene, mood, active, reducedMotion, surfaces }: SceneProps & { surfaces?: Record<'brick' | 'concrete', Surface> }) {
+  const generated = useMemo(() => ({ brick: surfaceTexture('brick'), wood: surfaceTexture('wood'), concrete: surfaceTexture('concrete'), soil: surfaceTexture('soil') }), [])
+  useEffect(() => () => Object.values(generated).forEach((texture) => texture.dispose()), [generated])
+  const textures: Record<'brick' | 'wood' | 'concrete' | 'soil', Surface> = {
+    brick: surfaces?.brick ?? { map: generated.brick, meters: [1.1, 0.64] },
+    concrete: surfaces?.concrete ?? { map: generated.concrete, meters: [2, 2] },
+    wood: { map: generated.wood, meters: [2, 2] },
+    soil: { map: generated.soil, meters: [2, 2] },
+  }
   const title = scene === 'S1' ? 'PUZL / COWORKING' : scene === 'S2' ? 'DEBRECEN / 03:00' : scene === 'S3' ? 'THE NEXT ROUND' : 'DEVIN / ENGINEERING'
   const subtitle = scene === 'S1' ? 'BUDAPEST     COGNITION x DEVIN     2026' : scene === 'S2' ? 'THREE FOUNDERS. ONE KITCHEN TABLE.' : scene === 'S3' ? 'BUILD SOMETHING PEOPLE WANT.' : 'REAL CODE. INDEPENDENT VERIFICATION.'
+  const deskFallback = <group>
+    <Box position={[0, 0.79, -5]} size={[5.5, 0.11, 1.4]} surface={textures.wood} />
+    {[-2.4, 2.4].flatMap((x) => [-5.5, -4.5].map((z) => <Box key={`${x}/${z}`} position={[x, 0.37, z]} size={[0.08, 0.74, 0.08]} />))}
+  </group>
+  const facadeFallback = <group>
+    {[-1, 1].map((side) => <Box key={side} position={[side * 12, 5, 1]} size={[5, 10, 28]} surface={textures.brick} />)}
+    <Box position={[0, 5, 19]} size={[26, 10, 4]} surface={textures.brick} />
+  </group>
   return <group>
-    <Box position={[0, -0.17, 2]} size={[15.2, 0.3, 21]} map={textures.soil} />
-    <Box position={[0, -0.04, -4]} size={[12, 0.12, 8]} map={scene === 'S2' ? textures.wood : textures.concrete} />
-    <Box position={[0, -0.01, 1]} size={[12, 0.08, 2]} map={textures.concrete} />
-    {Array.from({ length: 10 }, (_, i) => <Box key={i} position={[0, 0.005, 2.5 + i]} size={[2.12, 0.08, 0.94]} map={textures.concrete} />)}
-    <Box position={[0, 1.9, -8]} size={[12, 3.8, 0.28]} map={scene === 'S1' ? textures.brick : undefined} color={M.plaster} />
+    <Box position={[0, -0.17, 2]} size={[15.2, 0.3, 21]} surface={textures.soil} />
+    <Box position={[0, -0.04, -4]} size={[12, 0.12, 8]} surface={scene === 'S2' ? textures.wood : textures.concrete} />
+    <Box position={[0, -0.01, 1]} size={[12, 0.08, 2]} surface={textures.concrete} />
+    {Array.from({ length: 10 }, (_, i) => <Box key={i} position={[0, 0.005, 2.5 + i]} size={[2.12, 0.08, 0.94]} surface={textures.concrete} />)}
+    <Box position={[0, 1.9, -8]} size={[12, 3.8, 0.28]} surface={scene === 'S1' ? textures.brick : undefined} color={M.plaster} />
     {[-1, 1].map((side) => <group key={side}>
-      <Box position={[side * 6, 1.9, -4]} size={[0.28, 3.8, 8]} map={scene === 'S1' ? textures.brick : undefined} color={M.plaster} />
-      <Box position={[side * 3.75, 0.38, 0]} size={[4.5, 0.76, 0.25]} map={textures.brick} />
+      <Box position={[side * 6, 1.9, -4]} size={[0.28, 3.8, 8]} surface={scene === 'S1' ? textures.brick : undefined} color={M.plaster} />
+      <Box position={[side * 3.75, 0.38, 0]} size={[4.5, 0.76, 0.25]} surface={textures.brick} />
       <mesh position={[side * 3.75, 2.15, 0]}><boxGeometry args={[4.45, 2.75, 0.025]} /><meshPhysicalMaterial color={M.ambient} transparent opacity={0.12} roughness={0.08} metalness={0.15} depthWrite={false} /></mesh>
       {[1.5, 3, 4.5, 6].map((x) => <Box key={x} position={[side * x, 2.1, 0]} size={[0.055, 3.4, 0.1]} />)}
       <Box position={[side * 3.75, 2.5, 0]} size={[4.5, 0.05, 0.1]} />
-      <Box position={[side * 7.5, 0.45, 6.2]} size={[0.2, 0.9, 12.5]} map={textures.concrete} />
-      <Tree x={side * 5.5} z={3.8} />
+      <Box position={[side * 7.5, 0.45, 6.2]} size={[0.2, 0.9, 12.5]} surface={textures.concrete} />
+      <ErrorBoundary label="Courtyard tree" fallback={<Tree x={side * 5.5} z={3.8} />}><Suspense fallback={<Tree x={side * 5.5} z={3.8} />}><CourtyardTree x={side * 5.5} z={3.8} /></Suspense></ErrorBoundary>
       <group position={[side * 5.1, 0, 8]}>
-        {[0, 1, 2].map((n) => <Box key={n} position={[0, 0.48, -0.24 + n * 0.22]} size={[2.6, 0.07, 0.19]} map={textures.wood} />)}
+        {[0, 1, 2].map((n) => <Box key={n} position={[0, 0.48, -0.24 + n * 0.22]} size={[2.6, 0.07, 0.19]} surface={textures.wood} />)}
         {[-0.95, 0.95].map((x) => <Box key={x} position={[x, 0.25, 0]} size={[0.06, 0.5, 0.65]} />)}
       </group>
-      <Box position={[side * 4.8, 0.4, -5.7]} size={[1.25, 0.8, 2.8]} color={scene === 'S2' ? M.trouser : M.wood} map={scene === 'S2' ? undefined : textures.wood} />
+      <Box position={[side * 4.8, 0.4, -5.7]} size={[1.25, 0.8, 2.8]} color={scene === 'S2' ? M.trouser : M.wood} surface={scene === 'S2' ? undefined : textures.wood} />
     </group>)}
     <Box position={[0, 3.76, -4]} size={[12.3, 0.15, 8.3]} color={M.plaster} />
     {[-6, -3, 0].map((z) => <Box key={z} position={[0, 3.58, z]} size={[12, 0.3, 0.14]} />)}
-    <Box position={[0, 0.45, 12.5]} size={[15.2, 0.9, 0.25]} map={textures.concrete} />
+    <Box position={[0, 0.45, 12.5]} size={[15.2, 0.9, 0.25]} surface={textures.concrete} />
     <Sign title={title} subtitle={subtitle} position={[0, 2.6, -7.83]} width={5.2} />
     <Sign title="TAKE A BREATH." subtitle="STEP OUTSIDE. TOUCH GRASS. COME BACK." position={[-3.6, 1.15, 0.17]} width={2.8} />
-    <Box position={[0, 0.79, -5]} size={[5.5, 0.11, 1.4]} map={textures.wood} />
-    {[-2.4, 2.4].flatMap((x) => [-5.5, -4.5].map((z) => <Box key={`${x}/${z}`} position={[x, 0.37, z]} size={[0.08, 0.74, 0.08]} />))}
+    <ErrorBoundary label="Detailed desks" fallback={deskFallback}><Suspense fallback={deskFallback}><RealisticDesks /></Suspense></ErrorBoundary>
+    {scene === 'S1' && <LoftDetails />}
     {(['sadman', 'kirill', 'sergio'] as const).map((id, i) => <group key={id}>
       <Chair x={(i - 1) * 1.8} />
       <Laptop x={(i - 1) * 1.8} mood={mood} />
-      {id === 'kirill' ? <ErrorBoundary label="RemyFounder" fallback={<Founder id={id} x={0} active={active === id} mood={mood} reducedMotion={reducedMotion} />}>
-        <Suspense fallback={<Founder id={id} x={0} active={active === id} mood={mood} reducedMotion={reducedMotion} />}>
-          <RemyFounder x={0} active={active === id} mood={mood} reducedMotion={reducedMotion} />
+      {id !== 'sadman' ? <ErrorBoundary label={`${id}Founder`} fallback={<Founder id={id} x={(i - 1) * 1.8} active={active === id} mood={mood} reducedMotion={reducedMotion} />}>
+        <Suspense fallback={<Founder id={id} x={(i - 1) * 1.8} active={active === id} mood={mood} reducedMotion={reducedMotion} />}>
+          <RemyFounder asset={id === 'kirill' ? 'remy' : 'sergio'} x={(i - 1) * 1.8} active={active === id} mood={mood} reducedMotion={reducedMotion} />
         </Suspense>
       </ErrorBoundary> : <Founder id={id} x={(i - 1) * 1.8} active={active === id} mood={mood} reducedMotion={reducedMotion} />}
     </group>)}
@@ -170,11 +208,6 @@ export function SceneEnvironment({ scene, mood, active, reducedMotion }: { scene
       <Sign title="RUNWAY" subtitle="OWNERSHIP. GROWTH. SURVIVAL." position={[0, 0.2, 0.04]} width={2} />
       {[-0.7, 0, 0.7].map((x, i) => <Box key={x} position={[x, -0.4 + i * 0.08, 0.04]} size={[0.28, 0.22 + i * 0.16, 0.02]} color={M.win} />)}
     </group>}
-    {[-1, 1].map((side) => <group key={side}>
-      <Box position={[side * 12, 5, 1]} size={[5, 10, 28]} map={textures.brick} />
-      {Array.from({ length: 4 }, (_, floor) => Array.from({ length: 8 }, (_, bay) => <Box key={`${floor}/${bay}`} position={[side * 9.47, 1.8 + floor * 2.3, -10 + bay * 3.2]} size={[0.06, 1.45, 1.2]} color={M.dark} castShadow={false} />))}
-    </group>)}
-    <Box position={[0, 5, 19]} size={[26, 10, 4]} map={textures.brick} />
-    {Array.from({ length: 4 }, (_, floor) => Array.from({ length: 9 }, (_, bay) => <Box key={`${floor}/${bay}`} position={[-11 + bay * 2.75, 1.8 + floor * 2.3, 16.97]} size={[1.1, 1.45, 0.06]} color={M.dark} castShadow={false} />))}
+    <ErrorBoundary label="Detailed facades" fallback={facadeFallback}><Suspense fallback={facadeFallback}><DetailedFacades /></Suspense></ErrorBoundary>
   </group>
 }
