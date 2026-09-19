@@ -1,8 +1,13 @@
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, type RefObject } from 'react'
 import * as THREE from 'three'
 import { MATERIAL } from './sceneMaterials'
-import { createGrassField, type GroundCoverKind } from './grassField'
+import { GRASS_WIND_AMPLITUDE, createGrassField, grassBounds, type GroundCoverKind } from './grassField'
+import { WIND_GLSL, getWindUniforms, useWindDriver } from './wind'
+
+declare global {
+  interface Window { __runwayRendererInfo?: () => Record<string, number> }
+}
 
 export interface GrassInteraction {
   player: THREE.Vector2
@@ -47,15 +52,57 @@ function groundCoverGeometry(kind: GroundCoverKind) {
   geometry.setAttribute('bladeOffset', new THREE.InstancedBufferAttribute(field.offsets, 3))
   geometry.setAttribute('bladeShape', new THREE.InstancedBufferAttribute(field.shapes, 4))
   geometry.instanceCount = field.count
-  geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.4, 7), 11)
+  // Animated bounds: every root + tallest tip + the largest wind/foot/brush displacement (see grassBounds).
+  const bounds = grassBounds(field)
+  geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(...bounds.center), bounds.radius)
   return geometry
 }
 
+/** Vertex deformation shared by the lit material AND the depth material so shadows/depth agree with the blades. */
+function meadowVertex(shader: THREE.WebGLProgramParametersWithUniforms, uniforms: Record<string, THREE.IUniform>) {
+  Object.assign(shader.uniforms, uniforms, getWindUniforms())
+  shader.vertexShader = WIND_GLSL + `
+    attribute vec3 bladeOffset;
+    attribute vec4 bladeShape;
+    uniform vec2 playerPosition;
+    uniform vec2 brushPosition;
+    uniform float brushStrength;
+    varying float bladeHeight;
+    varying float bladeVariation;
+    varying float bladeAcross;
+  ` + shader.vertexShader
+  shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', `
+    vec3 objectNormal = normalize(vec3(-sin(bladeShape.x) * 0.45, 0.65 + position.y * 0.35, cos(bladeShape.x) * 0.45));
+  `)
+  shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
+    float h = position.y;
+    bladeHeight = h;
+    bladeVariation = bladeShape.w;
+    bladeAcross = position.x;
+    float angle = bladeShape.x;
+    vec3 transformed = vec3((position.x * cos(angle) - position.z * sin(angle)) * bladeShape.z, h * bladeShape.y, (position.x * sin(angle) + position.z * cos(angle)) * bladeShape.z);
+    transformed.xz += vec2(cos(angle), sin(angle)) * bladeShape.y * (0.12 + bladeShape.w * 0.28) * h * h;
+    transformed.y -= bladeShape.y * 0.12 * h * h * h;
+    // Shared wind: traveling wave along uWindDir, tips (h²) flex more than roots, far grass fades out.
+    float windFade = 1.0 - smoothstep(12.0, 32.0, distance(bladeOffset.xz, cameraPosition.xz));
+    transformed += windDisplace(bladeOffset.xz, h, 0.0, ${GRASS_WIND_AMPLITUDE.toFixed(3)} * windFade, bladeShape.w);
+    vec2 footDelta = bladeOffset.xz - playerPosition;
+    float footDistance = length(footDelta);
+    float footBend = (1.0 - smoothstep(0.1, 0.72, footDistance)) * 0.38;
+    vec2 brushDelta = bladeOffset.xz - brushPosition;
+    float brushDistance = length(brushDelta);
+    float brushBend = (1.0 - smoothstep(0.05, 0.75, brushDistance)) * brushStrength * 0.48;
+    transformed.xz += (footDelta / max(footDistance, 0.01) * footBend + brushDelta / max(brushDistance, 0.01) * brushBend) * h * h;
+    transformed.y *= 1.0 - min(0.7, (footBend + brushBend) * 1.4) * h;
+    transformed += bladeOffset;
+  `)
+}
+
 export function InteractiveGrass({ interactionRef, reducedMotion }: { interactionRef: RefObject<GrassInteraction>; reducedMotion: boolean }) {
+  // The grass hosts the single wind driver for the canvas; other consumers just read getWindUniforms().
+  useWindDriver(reducedMotion)
   const { layers, uniforms } = useMemo(() => {
     const uniforms = {
-      grassTime: { value: 0 },
-      grassWind: { value: 1 },
       playerPosition: { value: new THREE.Vector2(0, 5) },
       brushPosition: { value: new THREE.Vector2(0, 5) },
       brushStrength: { value: 0 },
@@ -69,44 +116,8 @@ export function InteractiveGrass({ interactionRef, reducedMotion }: { interactio
         meadowTip: { value: new THREE.Color(kind === 'seed' ? MATERIAL.wood : MATERIAL.grass).lerp(new THREE.Color(MATERIAL.paper), kind === 'seed' ? 0.5 : 0.14) },
       }
       material.onBeforeCompile = (shader) => {
-        Object.assign(shader.uniforms, uniforms, colors)
-        shader.vertexShader = `
-          attribute vec3 bladeOffset;
-          attribute vec4 bladeShape;
-          uniform float grassTime;
-          uniform float grassWind;
-          uniform vec2 playerPosition;
-          uniform vec2 brushPosition;
-          uniform float brushStrength;
-          varying float bladeHeight;
-          varying float bladeVariation;
-          varying float bladeAcross;
-        ` + shader.vertexShader
-        shader.vertexShader = shader.vertexShader.replace('#include <beginnormal_vertex>', `
-          vec3 objectNormal = normalize(vec3(-sin(bladeShape.x) * 0.45, 0.65 + position.y * 0.35, cos(bladeShape.x) * 0.45));
-        `)
-        shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `
-          float h = position.y;
-          bladeHeight = h;
-          bladeVariation = bladeShape.w;
-          bladeAcross = position.x;
-          float angle = bladeShape.x;
-          vec3 transformed = vec3((position.x * cos(angle) - position.z * sin(angle)) * bladeShape.z, h * bladeShape.y, (position.x * sin(angle) + position.z * cos(angle)) * bladeShape.z);
-          float wind = sin(grassTime * 1.35 + bladeOffset.x * 0.65 + bladeOffset.z * 0.42) * 0.035;
-          wind += sin(grassTime * 2.1 + bladeOffset.z * 1.8 + bladeShape.w * 2.0) * 0.012;
-          transformed.xz += vec2(cos(angle), sin(angle)) * bladeShape.y * (0.12 + bladeShape.w * 0.28) * h * h;
-          transformed.xz += vec2(0.75, 0.4) * wind * grassWind * h * h;
-          transformed.y -= bladeShape.y * 0.12 * h * h * h;
-          vec2 footDelta = bladeOffset.xz - playerPosition;
-          float footDistance = length(footDelta);
-          float footBend = (1.0 - smoothstep(0.1, 0.72, footDistance)) * 0.38;
-          vec2 brushDelta = bladeOffset.xz - brushPosition;
-          float brushDistance = length(brushDelta);
-          float brushBend = (1.0 - smoothstep(0.05, 0.75, brushDistance)) * brushStrength * 0.48;
-          transformed.xz += (footDelta / max(footDistance, 0.01) * footBend + brushDelta / max(brushDistance, 0.01) * brushBend) * h * h;
-          transformed.y *= 1.0 - min(0.7, (footBend + brushBend) * 1.4) * h;
-          transformed += bladeOffset;
-        `)
+        meadowVertex(shader, uniforms)
+        Object.assign(shader.uniforms, colors)
         shader.fragmentShader = `
           varying float bladeHeight;
           varying float bladeVariation;
@@ -124,19 +135,29 @@ export function InteractiveGrass({ interactionRef, reducedMotion }: { interactio
           diffuseColor.rgb *= meadowColor * (0.82 + bladeVariation * 0.3 + vein * 0.08);
         `)
       }
-      material.customProgramCacheKey = () => 'runway-reactive-meadow-v3'
-      return { kind, geometry, material }
+      material.customProgramCacheKey = () => 'runway-reactive-meadow-v4'
+      // Depth pass uses the identical deformation (only matters when a blade layer casts shadows or a depth prepass runs).
+      const depthMaterial = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide })
+      depthMaterial.onBeforeCompile = (shader) => meadowVertex(shader, uniforms)
+      depthMaterial.customProgramCacheKey = () => 'runway-reactive-meadow-v4-depth'
+      return { kind, geometry, material, depthMaterial }
     })
     return { layers, uniforms }
   }, [])
   const uniformsRef = useRef(uniforms)
-  useEffect(() => () => layers.forEach(({ geometry, material }) => { geometry.dispose(); material.dispose() }), [layers])
-  useFrame((_, delta) => {
-    if (!reducedMotion && !document.hidden) uniformsRef.current.grassTime.value += Math.min(delta, 0.05)
-    uniformsRef.current.grassWind.value = reducedMotion ? 0 : 1
+  const gl = useThree((state) => state.gl)
+  useEffect(() => () => layers.forEach(({ geometry, material, depthMaterial }) => { geometry.dispose(); material.dispose(); depthMaterial.dispose() }), [layers])
+  useEffect(() => {
+    // Debug/verification hook (scripts/grass-reference.browser.mjs): renderer stats + static grass budget.
+    const instances = layers.reduce((sum, { geometry }) => sum + geometry.instanceCount, 0)
+    const triangles = layers.reduce((sum, { geometry }) => sum + geometry.instanceCount * (geometry.index?.count ?? 0) / 3, 0)
+    window.__runwayRendererInfo = () => ({ calls: gl.info.render.calls, triangles: gl.info.render.triangles, geometries: gl.info.memory.geometries, textures: gl.info.memory.textures, grassInstances: instances, grassTriangles: triangles })
+    return () => { delete window.__runwayRendererInfo }
+  }, [layers, gl])
+  useFrame(() => {
     uniformsRef.current.playerPosition.value.copy(interactionRef.current.player)
     uniformsRef.current.brushPosition.value.copy(interactionRef.current.brush)
     uniformsRef.current.brushStrength.value = interactionRef.current.strength
   })
-  return <group>{layers.map(({ kind, geometry, material }) => <mesh key={kind} name={`Meadow-${kind}`} geometry={geometry} material={material} receiveShadow />)}</group>
+  return <group>{layers.map(({ kind, geometry, material, depthMaterial }) => <mesh key={kind} name={`Meadow-${kind}`} geometry={geometry} material={material} customDepthMaterial={depthMaterial} receiveShadow />)}</group>
 }

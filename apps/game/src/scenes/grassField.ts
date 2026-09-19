@@ -31,3 +31,36 @@ export function createGrassField(kind: GroundCoverKind) {
   }
   return { count, offsets, shapes }
 }
+
+export interface GrassField { count: number; offsets: Float32Array; shapes: Float32Array }
+export interface GrassBounds { center: [number, number, number]; radius: number }
+
+/** Tip displacement (metres) of a blade at full wind level; the shader multiplies by height² and the shared wind level. */
+export const GRASS_WIND_AMPLITUDE = 0.09
+
+/**
+ * Largest horizontal displacement (metres) the meadow vertex shader can add to a blade tip:
+ * wind (amplitude × (1 + 0.35 overshoot + 0.28 lateral)) + lean (≤0.4) + player foot (0.38) + brush (0.48).
+ */
+export const GRASS_MAX_DISPLACEMENT = GRASS_WIND_AMPLITUDE * (1 + 0.35 + 0.28) + 0.4 + 0.38 + 0.48
+
+/**
+ * Bounding sphere for a ground-cover layer covering every blade root, the tallest blade tip and the
+ * maximum animated displacement, so frustum culling never clips swaying or brushed grass.
+ */
+export function grassBounds(field: GrassField, maxDisplacement = GRASS_MAX_DISPLACEMENT): GrassBounds {
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, minY = Infinity, maxHeight = 0
+  for (let i = 0; i < field.count; i++) {
+    const x = field.offsets[i * 3], y = field.offsets[i * 3 + 1], z = field.offsets[i * 3 + 2]
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x)
+    minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z)
+    minY = Math.min(minY, y)
+    maxHeight = Math.max(maxHeight, y + field.shapes[i * 4 + 1])
+  }
+  if (!Number.isFinite(minX)) return { center: [0, 0, 0], radius: maxDisplacement }
+  const center: [number, number, number] = [(minX + maxX) / 2, (minY + maxHeight) / 2, (minZ + maxZ) / 2]
+  const halfX = (maxX - minX) / 2 + maxDisplacement
+  const halfY = (maxHeight - minY) / 2
+  const halfZ = (maxZ - minZ) / 2 + maxDisplacement
+  return { center, radius: Math.hypot(halfX, halfY, halfZ) + 0.05 }
+}
