@@ -1,10 +1,10 @@
 /** Pure game rules from docs/SKIT.md. No rendering, no input. */
-import { EVENTS } from '../events/skit.ts'
+import { DISABLE_FEED_SECOND, ENDING_LINES, EVENTS, MISSION_LINES, OPENING_LINES, RESULT_LINE, WAITING_LINES } from '../events/skit.ts'
 import { CAMPAIGN_EVENTS, campaignEventAt, campaignEnding } from '../events/campaign.ts'
 import { applyEffects } from './effects.ts'
 import { useGame } from '../state/gameStore.ts'
-import { _setVoiceContext, _setVoiceDispatcher, type VoiceContext } from '../state/voiceBridge.ts'
-import type { Choice, GameEvent, GameState } from '../state/types'
+import { _setVoiceContext, _setVoiceDispatcher, formatLines, speakLines, type VoiceContext } from '../state/voiceBridge.ts'
+import type { Choice, GameEvent, GameState, Line } from '../state/types'
 
 export const eventSequence = (s: Pick<GameState, 'mode'>): GameEvent[] => s.mode === 'campaign' ? CAMPAIGN_EVENTS : EVENTS
 export const currentEvent = (s: Pick<GameState, 'mode' | 'eventIndex' | 'flags' | 'missionOutcome'>): GameEvent | undefined => s.mode === 'campaign' ? campaignEventAt(s.eventIndex, s) : EVENTS[s.eventIndex]
@@ -29,10 +29,17 @@ export function resolveChoice(event: GameEvent, choiceId: string): Choice | null
   const choice = active.choices.find((c) => c.id === choiceId)
   if (!choice) return null
   g.set({ ...applyEffects(g, choice.effects ?? {}), resolved: { ...g.resolved, [event.id]: choice.id } })
+  if (choice.reaction) {
+    const lines: Line[] = [choice.reaction]
+    if (choice.id === 'disable_feed') lines.push(DISABLE_FEED_SECOND)
+    speakLines(lines, `${event.id}:reaction:${choice.id}`)
+  }
   return choice
 }
 
 // ---------- voice context (docs/VOICE.md) ----------
+
+const SPEAKER: Record<string, string> = { kirill: 'Kirill', sadman: 'Sadman', sergio: 'Sergio' }
 
 export function buildVoiceContext(event: GameEvent | undefined, s: GameState): VoiceContext | null {
   if (!event?.voice || s.resolved[event.id]) return null
@@ -57,13 +64,53 @@ GAME STATE: cash ${s.cash}, users ${s.users}, health ${s.health}, ownership ${s.
 YOUR ROLE: the investor. Offer is fixed: EUR 500 for 20%. Do not change terms. Be unimpressed but fair.
 ALLOWED CHOICES: accept = player takes the bridge; decline = player stays independent.
 Resolve after at most two player turns.`
+  } else {
+    const speakers = [...new Set(event.dialogue.map((l) => l.who).filter((w) => w !== 'kirill'))].map((w) => SPEAKER[w] ?? w)
+    const choices = event.choices.map((c) => `${c.id} = "${c.label}"${c.hint ? ` (${c.hint})` : ''}`).join('; ')
+    contextText = `CURRENT EVENT: ${event.id} "${event.title}"
+GAME STATE: cash ${s.cash}, users ${s.users}, health ${s.health}, morale ${s.morale}.
+YOUR ROLE: ${speakers.join(' and ')}, cofounders reacting to Kirill.
+ALLOWED CHOICES: ${choices}.`
   }
-  return { eventId: event.id as VoiceContext['eventId'], contextText, allowedChoices: allowed }
+  return { eventId: event.id, contextText, allowedChoices: allowed, linesText: formatLines(event.dialogue) }
 }
 
 /** Keep the voice bridge in sync with the store. Call once at app start. Returns unsubscribe. */
 export function connectVoiceBridge(onChoice: (event: GameEvent, choiceId: string, constraint?: string) => boolean) {
-  const sync = (s: GameState) => _setVoiceContext(s.screen === 'play' ? buildVoiceContext(currentEvent(s), s) : null)
+  let lastScreen: GameState['screen'] | null = null
+  let lastSpokenEvent: string | null = null
+  let lastOutcome: GameState['missionOutcome'] = 'none'
+  let resultTimer: ReturnType<typeof setTimeout> | null = null
+  const sync = (s: GameState) => {
+    const ev = currentEvent(s)
+    _setVoiceContext(s.screen === 'play' ? buildVoiceContext(ev, s) : null)
+    // Scripted lines -> voice (dedupe by tag happens in the live client).
+    if (s.screen !== lastScreen) {
+      if (s.screen === 'play' && lastScreen === 'opening') speakLines(OPENING_LINES, 'opening')
+      if (s.screen === 'result') {
+        // Result.tsx reveals the line at step 3 (~4.6s); delay so the voice roughly matches the card.
+        if (resultTimer) clearTimeout(resultTimer)
+        resultTimer = setTimeout(() => { if (useGame.getState().screen === 'result') speakLines([RESULT_LINE], 'result') }, 3000)
+      }
+      if (s.screen === 'devin') speakLines([WAITING_LINES[0]], 'waiting:0')
+      if (s.screen === 'ending') {
+        const win = ending(s) === 'STILL IN BUSINESS'
+        speakLines([win ? ENDING_LINES.win : ENDING_LINES.lose], `ending:${win ? 'win' : 'lose'}`)
+      }
+      lastScreen = s.screen
+    }
+    if (s.missionOutcome !== lastOutcome) {
+      lastOutcome = s.missionOutcome
+      if (s.missionOutcome === 'success' || s.missionOutcome === 'failure') {
+        speakLines(MISSION_LINES[s.missionOutcome], `mission:${s.missionOutcome}`, `VERIFIED GAME RESULT: Devin mission ${s.missionOutcome}.`)
+      }
+    }
+    if (s.screen === 'play' && ev) {
+      if (ev.id !== lastSpokenEvent) { lastSpokenEvent = ev.id; speakLines(ev.dialogue, `${ev.id}:dialogue`) }
+    } else if (s.screen === 'opening') {
+      lastSpokenEvent = null // restart: E01 speaks again (client dedupe set is cleared on disconnect)
+    }
+  }
   sync(useGame.getState())
   const unsub = useGame.subscribe(sync)
   _setVoiceDispatcher((eventId, choiceId, constraint) => {
@@ -71,5 +118,5 @@ export function connectVoiceBridge(onChoice: (event: GameEvent, choiceId: string
     if (!ev || ev.id !== eventId) return false
     return onChoice(ev, choiceId, constraint)
   })
-  return unsub
+  return () => { unsub(); if (resultTimer) clearTimeout(resultTimer) }
 }

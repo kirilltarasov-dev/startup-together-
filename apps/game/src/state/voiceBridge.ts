@@ -4,21 +4,53 @@
  * Do not add game logic here; this is a thin adapter over the stores.
  */
 
-export type VoiceEventId = 'E01' | 'E04' | 'E05'
+export type VoiceEventId = string
 
 export interface VoiceContext {
   eventId: VoiceEventId
   /** Ready-made event context block (docs/VOICE.md) with live numbers filled in. Send via session.update. */
   contextText: string
   allowedChoices: { id: string; label: string }[]
+  /** Scripted dialogue for the current event, one `SPEAKER: text` per line. */
+  linesText?: string
 }
 
 type Listener = (ctx: VoiceContext | null) => void
 type Dispatcher = (eventId: string, choiceId: string, constraint?: string) => boolean
 
+/** Scripted lines the founders should perform aloud. `tag` is the dedupe key (e.g. `E02:dialogue`). */
+export interface SpeakPayload { tag: string; text: string }
+type SpeakListener = (payload: SpeakPayload) => void
+
 let current: VoiceContext | null = null
 let dispatcher: Dispatcher = () => false
 const listeners = new Set<Listener>()
+let lastSpeak: SpeakPayload | null = null
+const speakListeners = new Set<SpeakListener>()
+
+const SPEAKER_NAME: Record<string, string> = { kirill: 'Kirill', sadman: 'Sadman', sergio: 'Sergio' }
+
+/** Format scripted lines as `SPEAKER: text`, one per line. */
+export function formatLines(lines: { who: string; text: string }[]): string {
+  return lines.map((l) => `${SPEAKER_NAME[l.who] ?? l.who}: ${l.text}`).join('\n')
+}
+
+/**
+ * Ask the voice session to perform scripted lines aloud. Independent of the choice context.
+ * `note` is an optional non-spoken lead line (e.g. `VERIFIED GAME RESULT: ...`).
+ */
+export function speakLines(lines: { who: string; text: string }[], tag: string, note?: string): void {
+  if (!lines.length) return
+  lastSpeak = { tag, text: (note ? `${note}\n` : '') + formatLines(lines) }
+  speakListeners.forEach((l) => l(lastSpeak!))
+}
+
+/** Fires on every speakLines call; replays the most recent payload on subscribe. Returns unsubscribe. */
+export function subscribeSpeak(cb: SpeakListener): () => void {
+  speakListeners.add(cb)
+  if (lastSpeak) cb(lastSpeak)
+  return () => { speakListeners.delete(cb) }
+}
 
 /** Current voice-enabled event, or null when no voice moment is active. */
 export function getVoiceContext(): VoiceContext | null {

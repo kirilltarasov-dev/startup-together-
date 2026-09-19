@@ -55,6 +55,7 @@ export const EVENTS: GameEvent[] = [
     scene: 'S1',
     icon: '🚀',
     title: 'Ship it',
+    voice: true,
     dialogue: [
       { who: 'sergio', text: "I already tweeted the launch. It's live in four hours." },
       { who: 'kirill', text: 'The demo works on my laptop. That is not the same as working.' },
@@ -70,6 +71,7 @@ export const EVENTS: GameEvent[] = [
     scene: 'S2',
     icon: '💸',
     title: 'Someone paid',
+    voice: true,
     dialogue: [
       { who: 'sergio', text: 'SOMEONE PAID US. I told you. I told everyone.' },
       { who: 'kirill', text: "Are we sure it wasn't you?" },

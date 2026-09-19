@@ -2,9 +2,10 @@
 // Mounted by Lane A in EventCard's voiceSlot. Never blocks the choice buttons.
 
 import { motion } from 'framer-motion'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getVoiceContext, subscribeVoiceContext } from '../state/voiceBridge'
-import { createLiveClient, type VoiceState } from './liveClient'
+import type { VoiceState } from './liveClient'
+import { getLiveClient } from './voiceSession'
 
 function MicIcon({ className = '' }: { className?: string }) {
   return (
@@ -38,13 +39,13 @@ function CloseIcon() {
 const ICON_BTN = 'inline-flex items-center justify-center w-7 h-7 rounded-full border border-white/15 bg-white/5 hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 transition-colors'
 
 export default function VoiceButton() {
-  const client = useMemo(() => createLiveClient(), [])
+  // Shared session: survives unmount/remount across screens. Disconnect is explicit (button, restart, caps).
+  const client = getLiveClient()
   const [s, setS] = useState<VoiceState>(() => client.getState())
   const [hasCtx, setHasCtx] = useState(() => getVoiceContext() !== null)
 
   useEffect(() => client.subscribe(setS), [client])
   useEffect(() => subscribeVoiceContext((ctx) => setHasCtx(ctx !== null)), [])
-  useEffect(() => () => client.disconnect(), [client])
 
   const connected = s.status === 'listening' || s.status === 'speaking'
 
