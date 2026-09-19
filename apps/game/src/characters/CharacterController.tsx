@@ -7,8 +7,8 @@ import * as THREE from 'three'
 import { CharacterModel } from './CharacterModel'
 import type { CharacterId } from './CharacterCustomization'
 import type { GrassInteraction } from '../scenes/InteractiveGrass'
-import { CAMERA_COLLIDERS } from '../world/colliderSpec'
-import { CAMERA_TARGET_OFFSET_Y, LOCOMOTION, PLAYER_BODY, SPAWN_POSITION } from './playerBody'
+import { CAMERA_COLLIDERS, colliderCenter, sceneExtraColliders, type ColliderScene } from '../world/colliderSpec'
+import { CAMERA, CAMERA_TARGET_OFFSET_Y, LOCOMOTION, PLAYER_BODY, SPAWN_POSITION, pickCameraSwing } from './playerBody'
 import { useFootsteps } from '../scenes/footsteps'
 import { isGrass } from '../engine/firstPerson'
 
@@ -17,22 +17,27 @@ export interface PlayerActions { reset: () => void; press: (key: string, down: b
 /**
  * Third-person camera: follow at ~3.2 m (1.6-5.5), look at chest height, never below the floor. camera-controls'
  * obstruction handling dollies in against the unified collider meshes; the post-step below refuses to let that
- * pull-in enter the character (>= CAMERA.minObstructedDistance) and raises the camera instead.
+ * pull-in enter the character (>= CAMERA.minObstructedDistance). Instead of rising to a top-down view it first
+ * probes alternative azimuths (same polar angle, preferred distance) and swings the orbit toward the smallest clear
+ * offset at <= 90 deg/s; only when no probed azimuth is clear does it fall back to raising the camera, and that rise
+ * is capped at `riseMinPolar`. Once clear it never swings back on its own (no ping-pong); only the polar angle eases
+ * back toward the player's own orbit angle. A user drag or wheel (`currentAction !== NONE`) always wins.
  */
-const CAMERA = { distance: 3.2, minDistance: 1.6, maxDistance: 5.5, minObstructedDistance: 1.2, smoothTime: 0.18, minPolar: 0.3, maxPolar: 1.5, defaultPolar: 1.15, raiseStep: 0.06, returnStep: 0.02 }
+/** camera-controls keeps the un-collided (user-chosen) orbit radius private; fall back to the default follow distance. */
+const preferredDistance = (controls: CameraControlsImpl) => THREE.MathUtils.clamp((controls as unknown as { _sphericalEnd?: THREE.Spherical })._sphericalEnd?.radius ?? CAMERA.distance, CAMERA.minDistance, CAMERA.maxDistance)
 
-export function CharacterController({ selected, paused, actionsRef, interaction }: { selected: CharacterId; paused: boolean; actionsRef: RefObject<PlayerActions | null>; interaction: RefObject<GrassInteraction> }) {
+export function CharacterController({ scene, selected, paused, actionsRef, interaction }: { scene: ColliderScene; selected: CharacterId; paused: boolean; actionsRef: RefObject<PlayerActions | null>; interaction: RefObject<GrassInteraction> }) {
   const body = useRef<EcctrlHandle>(null)
   const orbit = useRef<EcctrlCameraControlsHandle>(null)
   const keys = useRef(new Set<string>())
   const { gl, camera } = useThree()
-  const scratch = useRef({ target: new THREE.Vector3(), offset: new THREE.Vector3(), spherical: new THREE.Spherical(), raycaster: new THREE.Raycaster(), dir: new THREE.Vector3(), preferredPolar: CAMERA.defaultPolar })
-  const cameraColliders = useMemo(() => CAMERA_COLLIDERS.map((box) => {
+  const scratch = useRef({ target: new THREE.Vector3(), offset: new THREE.Vector3(), spherical: new THREE.Spherical(), probe: new THREE.Spherical(), raycaster: new THREE.Raycaster(), dir: new THREE.Vector3(), preferredPolar: CAMERA.defaultPolar as number, swing: { active: false, sign: 1, end: 0 } })
+  const cameraColliders = useMemo(() => [...CAMERA_COLLIDERS, ...sceneExtraColliders(scene).filter((box) => box.blocksCamera)].map((box) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(box.width, box.height, box.depth), new THREE.MeshBasicMaterial())
-    mesh.position.set(box.x, box.height / 2, box.z)
+    mesh.position.set(...colliderCenter(box))
     mesh.updateMatrixWorld()
     return mesh
-  }), [])
+  }), [scene])
   useEffect(() => {
     const clear = () => { keys.current.clear() }
     const down = (event: KeyboardEvent) => {
@@ -50,11 +55,19 @@ export function CharacterController({ selected, paused, actionsRef, interaction 
     return () => { clear(); window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', clear); document.removeEventListener('visibilitychange', clear) }
   }, [paused])
   useEffect(() => {
-    if (orbit.current) {
-      orbit.current.colliderMeshes = cameraColliders
+    /** Default follow view at the spawn point: behind the character (azimuth 0), default polar, default distance. */
+    const spawnView = () => {
+      const controls = orbit.current
+      if (!controls) return
       const target = new THREE.Vector3(SPAWN_POSITION.x, SPAWN_POSITION.y + CAMERA_TARGET_OFFSET_Y, SPAWN_POSITION.z)
       const eye = new THREE.Vector3().setFromSphericalCoords(CAMERA.distance, CAMERA.defaultPolar, 0).add(target)
-      orbit.current.setLookAt(eye.x, eye.y, eye.z, target.x, target.y, target.z, false)
+      controls.setLookAt(eye.x, eye.y, eye.z, target.x, target.y, target.z, false)
+      scratch.current.preferredPolar = CAMERA.defaultPolar
+      scratch.current.swing.active = false
+    }
+    if (orbit.current) {
+      orbit.current.colliderMeshes = cameraColliders
+      spawnView()
     }
     // the user's own orbit angle becomes the angle the obstruction avoidance returns to
     const controls = orbit.current
@@ -68,6 +81,7 @@ export function CharacterController({ selected, paused, actionsRef, interaction 
         actor.setLinvel({ x: 0, y: 0, z: 0 }, true)
         actor.setAngvel({ x: 0, y: 0, z: 0 }, true)
         keys.current.clear()
+        spawnView()   // RESET POSITION also resets the view: the swing-around never undoes itself
       },
       press: (key, down) => { if (down) keys.current.add(key); else keys.current.delete(key) },
     }
@@ -95,35 +109,55 @@ export function CharacterController({ selected, paused, actionsRef, interaction 
     // Camera post-step: camera-controls (priority -1) has already dollied against colliders for this frame.
     let camDist = 0
     if (controls) {
-      const { target, offset, spherical, raycaster, dir, preferredPolar } = scratch.current
+      const { target, offset, spherical, probe, raycaster, dir, preferredPolar, swing } = scratch.current
       controls.getTarget(target, false)
       offset.subVectors(camera.position, target)
       camDist = offset.length()
       const obstructed = camDist < CAMERA.minObstructedDistance - 1e-3
-      if (!obstructed && controls.currentAction === CameraControlsImpl.ACTION.NONE && controls.polarAngle < preferredPolar - 1e-3) {
-        // Ease back down toward the preferred orbit angle once that direction is clear again.
+      const idle = controls.currentAction === CameraControlsImpl.ACTION.NONE
+      /** Free run along an orbit direction (same polar, azimuth offset by `offsetRad`), capped at `maxDistance`. */
+      const clearDistance = (offsetRad: number, maxDistance: number, phi = controls.polarAngle) => {
+        probe.set(maxDistance, phi, controls.azimuthAngle + offsetRad)
+        dir.setFromSpherical(probe).normalize()
+        raycaster.set(target, dir)
+        raycaster.far = maxDistance + camera.near + 0.05
+        const hit = raycaster.intersectObjects(cameraColliders, false)[0]
+        return hit ? Math.max(0, hit.distance - camera.near - 0.05) : maxDistance
+      }
+      if (!idle) swing.active = false   // the player's own drag/wheel always wins; a swing resumes only on a fresh obstruction
+      if (idle && (obstructed || swing.active)) {
+        // Swing-around: probe azimuths at the preferred distance and rotate toward the smallest clear one (<= 90 deg/s).
+        const preferred = preferredDistance(controls)
+        const pick = pickCameraSwing((offsetRad) => clearDistance(offsetRad, preferred), preferred, swing.active ? (swing.sign as 1 | -1) : 0)
+        if (pick === null) swing.active = false
+        else {
+          if (!swing.active) { swing.active = true; swing.sign = Math.sign(pick); swing.end = controls.azimuthAngle }
+          const goal = controls.azimuthAngle + pick
+          const step = CAMERA.swingRate * Math.min(delta, 0.1)
+          swing.end = swing.sign > 0 ? Math.min(swing.end + step, goal) : Math.max(swing.end - step, goal)
+          controls.rotateAzimuthTo(swing.end, true)
+        }
+      }
+      if (!obstructed && idle && controls.polarAngle < preferredPolar - 1e-3) {
+        // Ease back down toward the preferred orbit angle once that direction is clear again (never swing back).
         spherical.setFromVector3(offset)
         spherical.phi = Math.min(preferredPolar, spherical.phi + CAMERA.returnStep)
-        dir.setFromSpherical(spherical).normalize()
-        raycaster.set(target, dir)
-        raycaster.far = spherical.radius + camera.near + 0.05
-        if (raycaster.intersectObjects(cameraColliders, false).length === 0) controls.rotatePolarTo(spherical.phi, false)
+        if (clearDistance(0, spherical.radius, spherical.phi) >= spherical.radius) controls.rotatePolarTo(spherical.phi, false)
       }
       if (obstructed) {
-        // Obstruction pulled the camera into the character: hold >= 1.2 m and look for a higher, clear angle.
+        // Obstruction pulled the camera into the character: hold >= 1.2 m. While a swing is under way keep the polar
+        // angle; only when no probed azimuth is clear look for a higher angle, and never above riseMinPolar.
         spherical.setFromVector3(offset)
         spherical.radius = CAMERA.minObstructedDistance
-        for (let phi = spherical.phi; phi >= CAMERA.minPolar; phi -= CAMERA.raiseStep) {
-          spherical.phi = phi
-          dir.setFromSpherical(spherical).normalize()
-          raycaster.set(target, dir)
-          raycaster.far = CAMERA.minObstructedDistance + camera.near + 0.05
-          if (raycaster.intersectObjects(cameraColliders, false).length === 0) break
+        if (!swing.active && idle) {
+          const startPhi = spherical.phi
+          let phi = startPhi
+          for (; phi >= CAMERA.riseMinPolar; phi -= CAMERA.raiseStep) if (clearDistance(0, CAMERA.minObstructedDistance, phi) >= CAMERA.minObstructedDistance) break
+          spherical.phi = Math.min(startPhi, Math.max(phi, CAMERA.riseMinPolar))
+          if (spherical.phi < startPhi - 1e-6) controls.rotatePolarTo(Math.max(CAMERA.riseMinPolar, spherical.phi - CAMERA.raiseStep), true)
         }
-        spherical.phi = Math.max(spherical.phi, CAMERA.minPolar)
         camera.position.setFromSpherical(spherical).add(target)
         camera.lookAt(target)
-        controls.rotatePolarTo(Math.max(CAMERA.minPolar, spherical.phi - CAMERA.raiseStep), true)
         camDist = CAMERA.minObstructedDistance
       }
     }
@@ -132,7 +166,7 @@ export function CharacterController({ selected, paused, actionsRef, interaction 
     canvas.character = selected
     canvas.grounded = String(actor.isOnGround)
     canvas.camDist = camDist.toFixed(2)
-    if (controls) canvas.camPolar = controls.polarAngle.toFixed(2)
+    if (controls) { canvas.camPolar = controls.polarAngle.toFixed(2); canvas.camAzimuth = controls.azimuthAngle.toFixed(2); canvas.camSwing = String(scratch.current.swing.active) }
     // facing evidence: +1 when the body's +Z (the model's face) points along the travel direction
     const v = actor.body.linvel()
     const planar = Math.hypot(v.x, v.z)
