@@ -21,8 +21,20 @@ class Settings:
     orch_token: str = os.environ.get("ORCH_TOKEN", "")
     allowed_origins: list[str] = field(default_factory=_origins)
     mission_timeout_sec: int = int(os.environ.get("MISSION_TIMEOUT_SEC", "480"))
+    max_acu_limit: int = int(os.environ.get("MAX_ACU_LIMIT", "3"))
+    github_token: str = os.environ.get("GITHUB_TOKEN", "")
+    work_dir: str = os.environ.get("WORK_DIR", "/tmp/runway-challenge")
     benchmark_threshold_sec: float = 0.5  # frozen, see docs/HANDOFF.md
+    bench_users: int = int(os.environ.get("BENCH_USERS", "50000"))
+    bench_posts_per_user: int = int(os.environ.get("BENCH_POSTS_PER_USER", "10"))
+    bench_samples: int = int(os.environ.get("BENCH_N", "5"))
+    runner_timeout_sec: int = int(os.environ.get("RUNNER_TIMEOUT_SEC", "120"))
     cache_file: str = os.environ.get("CACHE_FILE", os.path.join(os.path.dirname(__file__), "..", "..", "cache", "optimize_feed.json"))
+
+    @property
+    def repo_url(self) -> str:
+        auth = f"x-access-token:{self.github_token}@" if self.github_token else ""
+        return f"https://{auth}github.com/{self.challenge_repo}.git"
 
     @property
     def mode(self) -> Mode:
