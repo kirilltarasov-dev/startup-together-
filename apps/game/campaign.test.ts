@@ -18,7 +18,7 @@ test('demo stays five decisions; campaign has 35 unique encounters and one missi
   assert.equal(CAMPAIGN_EVENTS.length, 35)
   assert.equal(new Set(CAMPAIGN_EVENTS.map((e) => e.id)).size, 35)
   assert.equal(CAMPAIGN_EVENTS.flatMap((e) => e.choices).filter((c) => c.engineeringMission).length, 1)
-  assert.deepEqual(CAMPAIGN_EVENTS.filter((e) => e.voice).map((e) => e.id), ['E01', 'E04', 'E05'])
+  assert.deepEqual(CAMPAIGN_EVENTS.filter((e) => e.voice).map((e) => e.id), ['E01', 'E02', 'E03', 'E04', 'E05'])
   for (const event of CAMPAIGN_EVENTS) {
     assert.ok(event.dialogue.length >= 3)
     assert.ok(event.choices.length >= 2)

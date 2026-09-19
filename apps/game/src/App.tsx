@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { connectVoiceBridge, currentEvent } from './engine/engine'
 import { DevinMode } from './scenes/DevinMode'
 import { Ending } from './scenes/Ending'
@@ -8,10 +8,20 @@ import { Play } from './scenes/Play'
 import { Result } from './scenes/Result'
 import { useGame } from './state/gameStore'
 import { useRun } from './state/runStore'
-import { VoiceButton } from './voice'
+import { VoiceButton, getLiveClient, initTts, stageInit, ttsSetMuted, ttsVoiceReport } from './voice'
 
 export default function App() {
   const screen = useGame((s) => s.screen)
+  // The live session is a singleton and survives screen changes; show a Mute/Disconnect pill off the Play screen.
+  const [voiceOn, setVoiceOn] = useState(false)
+  useEffect(() => getLiveClient().subscribe((s) => { setVoiceOn(s.status !== 'idle'); ttsSetMuted(s.muted) }), [])
+  // Scripted founder lines: one serialized speech queue (stageManager) -> live voice for Sergio/Investor, local TTS otherwise.
+  useEffect(() => {
+    const offTts = initTts() // voice-list warmup
+    const offStage = stageInit()
+    ;(window as unknown as { runwayVoices?: () => Record<string, string> }).runwayVoices = ttsVoiceReport
+    return () => { offStage(); offTts() }
+  }, [])
 
   // Voice (Lane V) → same validated path as buttons. The Play scene consumes runStore.voiceRequest.
   useEffect(() => connectVoiceBridge((event, choiceId, constraint) => {
@@ -32,6 +42,11 @@ export default function App() {
           {screen === 'ending' && <Ending />}
         </motion.div>
       </AnimatePresence>
+      {voiceOn && screen !== 'play' && (
+        <div className="fixed top-3 right-3 z-50 rounded-2xl border border-white/10 bg-[#1A1B1E]/90 backdrop-blur px-3 py-2">
+          <VoiceButton />
+        </div>
+      )}
     </div>
   )
 }
