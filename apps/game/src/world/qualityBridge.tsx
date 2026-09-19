@@ -1,6 +1,8 @@
+import { setLightingQuality } from '../scenes/sceneLighting'
+import { setGrassDensity } from '../scenes/InteractiveGrass'
 import { useFrame } from '@react-three/fiber'
-import { useState } from 'react'
-import { QUALITY_ORDER, QualityAutoTuner, getQualityState, setQuality, type Quality } from './quality'
+import { useEffect, useState } from 'react'
+import { QUALITY_ORDER, QualityAutoTuner, getQuality, getQualityState, setQuality, subscribeQuality, type Quality } from './quality'
 import { useQuality } from './useQuality'
 
 const LABEL: Record<Quality, string> = { high: 'High', balanced: 'Balanced', low: 'Low' }
@@ -19,6 +21,12 @@ export function QualitySelect({ className = '' }: { className?: string }) {
  */
 export function QualityBridge() {
   const [tuner] = useState(() => new QualityAutoTuner(getQualityState, (tier) => setQuality(tier, 'auto')))
+  // Push the tier into the scene systems that cannot import this module (lighting shadow maps, grass density).
+  useEffect(() => {
+    const apply = () => { const q = getQuality(); setLightingQuality({ shadowMapSize: q.shadowMapSize, shadows: q.shadows, contactShadows: q.contactShadows }); setGrassDensity(q.grassDensity) }
+    apply()
+    return subscribeQuality(apply)
+  }, [])
   useFrame((state, delta) => {
     const before = tuner.windows
     tuner.sample(delta * 1000, performance.now())

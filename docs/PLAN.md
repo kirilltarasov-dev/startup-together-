@@ -1,5 +1,22 @@
 # Delivery Plan
 
+## Polish Phase 2 — Camera swing, true night, colliders, quality tiers (September 19-20, 2026)
+
+Branch `feat/polish2-integration` (base main@5524606). Workstreams feat/polish2-camera + feat/polish2-night merged; integrator wired quality -> lighting shadow maps + grass density.
+
+| ID | Area | Status | Evidence |
+| --- | --- | --- | --- |
+| POL2-CAM | Camera swings around obstructions (<= 90 deg/s), 1.2 m hold, polar-rise last resort capped 0.55; RESET resets view | DONE | Corner: camDist 1.20 -> 3.20, polar 1.15 held (was near top-down), 94.5 deg swing; TP full story THIRD_PERSON_PASS under Chrome |
+| POL2-COL | S2/devin false ceiling collider at 2.5 m; S3 investor chair colliders (no chair meshes yet) | DONE | colliderSpec tests: scene-scoped extras, doorway clear |
+| POL2-Q | Quality tiers high/balanced/low (DPR cap, shadow map, shadows, grass density, contact shadows), persisted, auto step-down/up with hysteresis, toolbar select | DONE | quality.test.ts 10/10; canvas data-quality; auto step-down observed under headless SwiftShader load |
+| POL2-NIGHT | S2 true night: Sky hidden, gradient dome + 360 stars, 4 lit facade panes, sodium lamp post; founder face fill | DONE | S2 sky luminance 217 -> 5; S1/S3 spawn frames pixel-identical to Phase 1; Sadman face 30 -> 35 (asset albedo limits further gain) |
+| POL2-HARN | third-person.browser.mjs clicks only settled/topmost/opaque buttons (AnimatePresence ghost under Chrome) | DONE (flaky once) | 2 of 3 full runs pass; one run timed out at TALK TO FOUNDERS in S3 (harness timing, STORY_TOGGLE trail added) |
+
+Totals: tsc/lint clean, 59/59 tests, build ok, FP story pass (0 failed assets). 60 s TP route at identical machine load (load avg ~35-43): Phase 1 p50 16.7 / p95 33.4 / 1 hitch vs Phase 2 p50 16.7 / p95 33.4 / 5 hitches (quality step-down reconfiguration) - no rendering regression; SwiftShader numbers are not GPU headroom.
+
+Limitations: run/jump/fall/land clips still missing (see Phase 1); S3 chair colliders have no visible chairs; S2 ceiling collider bumps jumps (intended apartment); Sadman face stays dark (hood albedo); quality auto step-up unverifiable without a real GPU; preferredDistance reads a camera-controls private field.
+
+
 ## Polish Phase 1 — Locomotion, Locations, Ambient Motion (September 19, 2026, evening)
 
 Branch `feat/polish-integration` (base main@012d2cb; workstream branches feat/polish-{locomotion,ambient,environment} merged). Not pushed or deployed. Integrator: Devin (this window).
