@@ -1,7 +1,7 @@
 // Vercel serverless route: mints a GPT-Live session via Microsoft Azure Foundry.
 // Secrets read here ONLY: AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY,
 // AZURE_LIVE_DEPLOYMENT, AZURE_RESPONSES_DEPLOYMENT. Optional tuning (non-secret):
-// AZURE_LIVE_VOICE (default meridian), AZURE_RESPONSES_REASONING (default minimal).
+// AZURE_LIVE_VOICE (default meridian), AZURE_RESPONSES_REASONING (unset by default).
 // None of the secrets are ever sent to the browser; only the SDP answer plus the
 // non-secret delegation config the client must echo back in session.update.
 // See docs/VOICE.md for the full contract.
@@ -87,7 +87,9 @@ export default async function handler(req: Request): Promise<Response> {
   const liveDeployment = process.env.AZURE_LIVE_DEPLOYMENT
   const responsesDeployment = process.env.AZURE_RESPONSES_DEPLOYMENT
   const voice = process.env.AZURE_LIVE_VOICE || 'meridian'
-  const reasoningEffort = process.env.AZURE_RESPONSES_REASONING || 'minimal'
+  // Only sent when explicitly set: gpt-5.4-mini rejects 'minimal' at delegation time
+  // (session creation accepts it, the backend call then errors and choose never fires).
+  const reasoningEffort = process.env.AZURE_RESPONSES_REASONING || ''
   if (!endpoint || !apiKey || !liveDeployment || !responsesDeployment) {
     return json({ error: 'voice not configured' }, 503)
   }
@@ -111,7 +113,7 @@ export default async function handler(req: Request): Promise<Response> {
     parallel_tool_calls: false,
     max_output_tokens: 200,
     text: { verbosity: 'low' },
-    reasoning: { effort: reasoningEffort },
+    ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
   }
 
   const session = {

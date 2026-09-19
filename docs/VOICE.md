@@ -108,8 +108,10 @@ Rules:
 - Two prompts: `VOICE_PROMPT` (live model; brisk 8-18 word delivery, one persona per reply,
   Backchannel / Interruption / Delegation policies, Kirill defined for scripted lines only and
   never as the player) and `ROUTER_PROMPT` (compact backend router; one `choose` call, no prose).
-- `delegation.responses.reasoning.effort` from env `AZURE_RESPONSES_REASONING`, default
-  `minimal` (schema-accepted for `none` and `minimal`; `low` probe hit the rate limit).
+- `delegation.responses.reasoning` is **omitted unless** env `AZURE_RESPONSES_REASONING` is set.
+  Live test 2026-09-19: session creation accepted `minimal`, but `gpt-5.4-mini-2026-03-17`
+  rejected it at delegation time ("Unsupported value: 'minimal'"), so `choose` never fired.
+  Do not set it without a full live tool-call test.
 - The route echoes the non-secret `delegation.responses` object back to the browser as
   `runway.responses`; the client resends it whole on every `session.update`, changing only
   `instructions` (event context appended) and `tool_choice`.
