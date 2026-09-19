@@ -6,7 +6,6 @@
 import {
   dispatchVoiceChoice,
   getVoiceContext,
-  subscribeSpeak,
   subscribeVoiceContext,
   type SpeakPayload,
   type VoiceContext,
@@ -30,6 +29,14 @@ export interface LiveClient {
   setMuted(muted: boolean): void
   getState(): VoiceState
   subscribe(cb: (s: VoiceState) => void): () => void
+  /** Quiet SCENE SO FAR context (session.thinking.append), once per tag. Buffered (latest only) before session.started. */
+  noteScene(payload: SpeakPayload): void
+  /** Ask the live voice to say `text` verbatim. Resolves true once it has spoken (or after 7 s); false if no session. */
+  sayAsLive(text: string): Promise<boolean>
+  isSpeaking(): boolean
+  isChooseInFlight(): boolean
+  /** Fires on the first input transcript delta after >= 1.5 s of silence (a new player turn). */
+  onPlayerSpeech(cb: () => void): () => void
 }
 
 /**
@@ -47,10 +54,14 @@ const ICE_GATHER_TIMEOUT_MS = 1000
 const SPEAKING_SETTLE_MS = 1200
 /** Max chars of scripted-line commentary per append (keep the tail). */
 const SPEAK_CAP_CHARS = 1800
-/** Safety: if a delegation never yields a choose call, stop holding scripted lines after this long. */
+/** Safety: if a delegation never yields a choose call, stop reporting it in flight after this long. */
 const CHOOSE_INFLIGHT_MAX_MS = 20_000
 /** Scripted lines go to the live model as QUIET context (the game plays them itself via tts.ts). */
 const SPEAK_PREFIX = 'SCENE SO FAR (already spoken aloud by the game; do not repeat these lines):\n'
+/** sayAsLive: give up waiting for speaking -> listening after this long. */
+const SAY_LIVE_MAX_MS = 7000
+/** A new player turn = first input transcript delta after this much input silence. */
+const PLAYER_TURN_GAP_MS = 1500
 /** Transcript fallback: if the player clearly named a choice and no choose arrives, dispatch locally. */
 const TRANSCRIPT_SETTLE_MS = 1400
 const CHOICE_SYNONYMS: Record<string, string[]> = {
@@ -126,15 +137,15 @@ export function createLiveClient(): LiveClient {
   let tFirstReplyAfterHeard = 0
   /** performance.now() when session.delegation.created arrived, by delegation id. */
   const delegationStart = new Map<string, number>()
-  // Scripted lines (voiceBridge.speakLines) -> session.commentary.append.
-  let unsubSpeak: (() => void) | null = null
+  // Scripted lines (stageManager.noteScene) -> quiet session.thinking.append, once per tag.
   const spokenTags = new Set<string>()
   /** Before session.started: only the most recent payload is kept. */
   let pendingSpeak: SpeakPayload | null = null
-  /** While a choose is in flight: queued payloads, flushed after the tool result's response.create. */
-  const speakQueue: SpeakPayload[] = []
   let chooseInFlight = false
   let inflightTimer: ReturnType<typeof setTimeout> | null = null
+  /** performance.now() of the last input transcript delta (player-turn detection). */
+  let lastInputDeltaAt = 0
+  const playerSpeechListeners = new Set<() => void>()
 
   const set = (patch: Partial<VoiceState>) => {
     state = { ...state, ...patch }
@@ -205,11 +216,36 @@ export function createLiveClient(): LiveClient {
     return kept.length ? kept.join('\n') : text.slice(-SPEAK_CAP_CHARS)
   }
 
-  const sendSpeak = (p: SpeakPayload) => {
+  const noteScene = (p: SpeakPayload) => {
+    if (!started) { pendingSpeak = p; return }
     if (spokenTags.has(p.tag)) return
     spokenTags.add(p.tag)
-    // Quiet context only: audible playback of scripted lines is tts.ts (distinct voices).
+    // Quiet context only: audible playback is sequenced by stageManager.ts (TTS or sayAsLive).
     send({ type: 'session.thinking.append', delegation_id: null, content: SPEAK_PREFIX + capLines(p.text) })
+  }
+
+  /** Have the live voice say one scripted line verbatim; resolves when it stops speaking (or 7 s). */
+  const sayAsLive = (text: string): Promise<boolean> => {
+    if (!started || !dc || dc.readyState !== 'open') return Promise.resolve(false)
+    const ok = send({
+      type: 'session.commentary.append',
+      delegation_id: null,
+      content: `Say exactly this line now, as yourself, nothing else: "${text.replace(/"/g, "'")}"`,
+    })
+    if (!ok) return Promise.resolve(false)
+    return new Promise<boolean>((resolve) => {
+      let sawSpeaking = false
+      let off: (() => void) | null = null
+      const finish = () => { if (off) { off(); off = null } clearTimeout(t); resolve(true) }
+      const t = setTimeout(finish, SAY_LIVE_MAX_MS)
+      const cb = (s: VoiceState) => {
+        if (s.status === 'speaking') sawSpeaking = true
+        else if (s.status === 'listening' && sawSpeaking) finish()
+        else if (s.status === 'idle' || s.status === 'unavailable') finish()
+      }
+      listeners.add(cb)
+      off = () => { listeners.delete(cb) }
+    })
   }
 
   // ---- transcript fallback: the game must always progress ----
@@ -247,22 +283,10 @@ export function createLiveClient(): LiveClient {
     transcriptTimer = setTimeout(tryTranscriptFallback, TRANSCRIPT_SETTLE_MS)
   }
 
-  const flushSpeakQueue = () => {
-    while (speakQueue.length) sendSpeak(speakQueue.shift()!)
-  }
-
   const setChooseInFlight = (on: boolean) => {
     chooseInFlight = on
     if (inflightTimer) { clearTimeout(inflightTimer); inflightTimer = null }
-    if (on) inflightTimer = setTimeout(() => { if (chooseInFlight) { chooseInFlight = false; flushSpeakQueue() } }, CHOOSE_INFLIGHT_MAX_MS)
-    else flushSpeakQueue()
-  }
-
-  const onSpeak = (p: SpeakPayload) => {
-    if (!started) { pendingSpeak = p; return }
-    if (spokenTags.has(p.tag)) return
-    if (chooseInFlight) { speakQueue.push(p); return }
-    sendSpeak(p)
+    if (on) inflightTimer = setTimeout(() => { chooseInFlight = false }, CHOOSE_INFLIGHT_MAX_MS)
   }
 
   const markSpeaking = () => {
@@ -304,7 +328,7 @@ export function createLiveClient(): LiveClient {
     // (whole delegation object resent), then continue so the voice can react.
     if (lastPushedText) sendDelegation(lastPushedText, 'none')
     send({ type: 'response.create' })
-    // Choose is no longer in flight: release any scripted lines held back meanwhile.
+    // Choose is no longer in flight: the stage manager may resume scripted lines.
     setChooseInFlight(false)
   }
 
@@ -324,7 +348,7 @@ export function createLiveClient(): LiveClient {
         set({ status: 'listening', reason: undefined })
         const ctx = getVoiceContext()
         if (ctx) { lastCtxId = ctx.eventId; pushContext(ctx) }
-        if (pendingSpeak) { const p = pendingSpeak; pendingSpeak = null; onSpeak(p) }
+        if (pendingSpeak) { const p = pendingSpeak; pendingSpeak = null; noteScene(p) }
         return
       }
       case 'session.delegation.created': {
@@ -347,6 +371,10 @@ export function createLiveClient(): LiveClient {
       case 'session.input_transcript.delta': {
         const delta = typeof msg.delta === 'string' ? msg.delta : ''
         tLastHeard = performance.now(); tFirstReplyAfterHeard = 0
+        if (tLastHeard - lastInputDeltaAt >= PLAYER_TURN_GAP_MS) {
+          playerSpeechListeners.forEach((l) => { try { l() } catch (e) { console.warn('[voice] player-speech listener threw', e) } })
+        }
+        lastInputDeltaAt = tLastHeard
         set({ heard: (state.heard + delta).slice(-200) })
         noteTranscript(delta)
         return
@@ -384,11 +412,10 @@ export function createLiveClient(): LiveClient {
     if (nullCtxTimer) { clearTimeout(nullCtxTimer); nullCtxTimer = null }
     if (speakTimer) { clearTimeout(speakTimer); speakTimer = null }
     if (unsubCtx) { unsubCtx(); unsubCtx = null }
-    if (unsubSpeak) { unsubSpeak(); unsubSpeak = null }
     if (inflightTimer) { clearTimeout(inflightTimer); inflightTimer = null }
     chooseInFlight = false
     pendingSpeak = null
-    speakQueue.length = 0
+    lastInputDeltaAt = 0
     transcriptBuf = ''
     if (transcriptTimer) { clearTimeout(transcriptTimer); transcriptTimer = null }
     spokenTags.clear()
@@ -487,7 +514,6 @@ export function createLiveClient(): LiveClient {
       if (pc !== localPc) return
 
       unsubCtx = subscribeVoiceContext(onCtx)
-      unsubSpeak = subscribeSpeak(onSpeak) // replays the latest scripted lines; buffered until session.started
       capTimer = setTimeout(() => { if (active()) disconnect('10 minute cap') }, SESSION_CAP_MS)
       // status becomes 'listening' on session.started
     } catch (e) {
@@ -511,6 +537,14 @@ export function createLiveClient(): LiveClient {
       listeners.add(cb)
       cb(state)
       return () => { listeners.delete(cb) }
+    },
+    noteScene,
+    sayAsLive,
+    isSpeaking: () => state.status === 'speaking',
+    isChooseInFlight: () => chooseInFlight,
+    onPlayerSpeech(cb) {
+      playerSpeechListeners.add(cb)
+      return () => { playerSpeechListeners.delete(cb) }
     },
   }
 }
