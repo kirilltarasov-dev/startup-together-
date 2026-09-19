@@ -49,7 +49,22 @@ const SPEAKING_SETTLE_MS = 1200
 const SPEAK_CAP_CHARS = 1800
 /** Safety: if a delegation never yields a choose call, stop holding scripted lines after this long. */
 const CHOOSE_INFLIGHT_MAX_MS = 20_000
-const SPEAK_PREFIX = 'SCRIPTED LINES. Perform aloud, one persona per line, in character:\n'
+/** Scripted lines go to the live model as QUIET context (the game plays them itself via tts.ts). */
+const SPEAK_PREFIX = 'SCENE SO FAR (already spoken aloud by the game; do not repeat these lines):\n'
+/** Transcript fallback: if the player clearly named a choice and no choose arrives, dispatch locally. */
+const TRANSCRIPT_SETTLE_MS = 1400
+const CHOICE_SYNONYMS: Record<string, string[]> = {
+  focused: ['founders only', 'founder only', 'founders', 'focused', 'small', 'niche'],
+  broad: ['everyone', 'everybody', 'anyone', 'broad', 'pitch', 'wide', 'open it up'],
+  careful: ['test', 'tests', 'careful', 'check', 'qa', 'verify', 'slow down'],
+  rush: ['ship', 'tonight', 'rush', 'launch now', 'yolo', 'send it', 'go live'],
+  celebrate: ['dinner', 'celebrate', 'party', 'treat', 'buy the team'],
+  save: ['save', 'forint', 'frugal', 'keep the money', 'noodles', 'cheap'],
+  send_devin: ['devin', 'send devin', 'fix it', 'fix the feed', 'engineer', 'call devin'],
+  disable_feed: ['disable', 'turn off', 'kill the feed', 'shut it', 'switch off', 'take it down'],
+  accept: ['accept', 'take the', 'take it', 'deal', 'yes to the', 'sign', 'bridge'],
+  decline: ['decline', 'no deal', 'independent', 'walk away', 'pass', 'reject', 'refuse'],
+}
 
 let eventCounter = 0
 const nextEventId = () => `evt_${Date.now().toString(36)}_${(++eventCounter).toString(36)}`
@@ -170,6 +185,7 @@ export function createLiveClient(): LiveClient {
     }
     if (ctx.eventId !== lastCtxId) {
       lastCtxId = ctx.eventId
+      transcriptBuf = ''
       set({ caption: '', heard: '' })
     }
     pushContext(ctx)
@@ -192,7 +208,43 @@ export function createLiveClient(): LiveClient {
   const sendSpeak = (p: SpeakPayload) => {
     if (spokenTags.has(p.tag)) return
     spokenTags.add(p.tag)
-    send({ type: 'session.commentary.append', delegation_id: null, content: SPEAK_PREFIX + capLines(p.text) })
+    // Quiet context only: audible playback of scripted lines is tts.ts (distinct voices).
+    send({ type: 'session.thinking.append', delegation_id: null, content: SPEAK_PREFIX + capLines(p.text) })
+  }
+
+  // ---- transcript fallback: the game must always progress ----
+  let transcriptBuf = ''
+  let transcriptTimer: ReturnType<typeof setTimeout> | null = null
+
+  const matchChoice = (text: string, ctx: VoiceContext): string | null => {
+    const t = ` ${text.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ')} `
+    const hits = new Set<string>()
+    for (const c of ctx.allowedChoices) {
+      const keys = [c.label.toLowerCase(), c.id.replace(/_/g, ' '), ...(CHOICE_SYNONYMS[c.id] ?? [])]
+      if (keys.some((k) => k && t.includes(` ${k} `) || (k.length > 5 && t.includes(k)))) hits.add(c.id)
+    }
+    return hits.size === 1 ? [...hits][0] : null
+  }
+
+  const tryTranscriptFallback = () => {
+    const ctx = getVoiceContext()
+    if (!ctx || resolvedEvents.has(ctx.eventId) || !transcriptBuf.trim()) return
+    const choiceId = matchChoice(transcriptBuf, ctx)
+    if (!choiceId) return
+    const ok = dispatchVoiceChoice(ctx.eventId, choiceId)
+    console.info('[voice] transcript fallback', { eventId: ctx.eventId, choiceId, ok, heard: transcriptBuf.trim() })
+    if (!ok) return
+    resolvedEvents.add(ctx.eventId)
+    transcriptBuf = ''
+    // Tell the live model the decision is already applied so it reacts instead of asking again.
+    send({ type: 'session.instructions.append', delegation_id: null, content: `The player's choice "${choiceId}" for ${ctx.eventId} is already applied by the game. React in one short in-character sentence. Do not ask again.` })
+    if (lastPushedText) sendDelegation(lastPushedText, 'none')
+  }
+
+  const noteTranscript = (delta: string) => {
+    transcriptBuf = (transcriptBuf + delta).slice(-300)
+    if (transcriptTimer) clearTimeout(transcriptTimer)
+    transcriptTimer = setTimeout(tryTranscriptFallback, TRANSCRIPT_SETTLE_MS)
   }
 
   const flushSpeakQueue = () => {
@@ -296,6 +348,7 @@ export function createLiveClient(): LiveClient {
         const delta = typeof msg.delta === 'string' ? msg.delta : ''
         tLastHeard = performance.now(); tFirstReplyAfterHeard = 0
         set({ heard: (state.heard + delta).slice(-200) })
+        noteTranscript(delta)
         return
       }
       case 'response.event': {
@@ -336,6 +389,8 @@ export function createLiveClient(): LiveClient {
     chooseInFlight = false
     pendingSpeak = null
     speakQueue.length = 0
+    transcriptBuf = ''
+    if (transcriptTimer) { clearTimeout(transcriptTimer); transcriptTimer = null }
     spokenTags.clear()
     delegationStart.clear()
     try { stream?.getTracks().forEach((t) => t.stop()) } catch { /* ignore */ }

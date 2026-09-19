@@ -19,7 +19,7 @@ type Listener = (ctx: VoiceContext | null) => void
 type Dispatcher = (eventId: string, choiceId: string, constraint?: string) => boolean
 
 /** Scripted lines the founders should perform aloud. `tag` is the dedupe key (e.g. `E02:dialogue`). */
-export interface SpeakPayload { tag: string; text: string }
+export interface SpeakPayload { tag: string; text: string; lines: { who: string; text: string }[] }
 type SpeakListener = (payload: SpeakPayload) => void
 
 let current: VoiceContext | null = null
@@ -41,7 +41,7 @@ export function formatLines(lines: { who: string; text: string }[]): string {
  */
 export function speakLines(lines: { who: string; text: string }[], tag: string, note?: string): void {
   if (!lines.length) return
-  lastSpeak = { tag, text: (note ? `${note}\n` : '') + formatLines(lines) }
+  lastSpeak = { tag, text: (note ? `${note}\n` : '') + formatLines(lines), lines }
   speakListeners.forEach((l) => l(lastSpeak!))
 }
 

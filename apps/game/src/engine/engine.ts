@@ -39,7 +39,6 @@ export function resolveChoice(event: GameEvent, choiceId: string): Choice | null
 
 // ---------- voice context (docs/VOICE.md) ----------
 
-const SPEAKER: Record<string, string> = { kirill: 'Kirill', sadman: 'Sadman', sergio: 'Sergio' }
 
 export function buildVoiceContext(event: GameEvent | undefined, s: GameState): VoiceContext | null {
   if (!event?.voice || s.resolved[event.id]) return null
@@ -48,13 +47,13 @@ export function buildVoiceContext(event: GameEvent | undefined, s: GameState): V
   if (event.id === 'E01') {
     contextText = `CURRENT EVENT: E01 "What are we building?"
 GAME STATE: cash ${s.cash}, users ${s.users}, health ${s.health}, morale ${s.morale}.
-YOUR ROLE: Sadman and Sergio reacting to Kirill's pitch.
+YOUR ROLE: Sergio (you), reacting to Kirill's pitch. Sadman's lines are played by the game.
 ALLOWED CHOICES: focused = "founders only" (small, focused); broad = "everyone with a pitch" (wide, noisy).
 Sergio wants broad and a launch tweet tonight; Sadman worries about noisy data. Let the player's pitch decide.`
   } else if (event.id === 'E04') {
     contextText = `CURRENT EVENT: E04 "We went viral, the feed is dying"
 GAME STATE: users ${s.users}, health ${s.health}. Production is slow.
-YOUR ROLE: Sadman and Sergio under pressure. The player is giving orders to Devin, the AI engineer.
+YOUR ROLE: Sergio (you), under pressure. The player is giving orders to Devin, the AI engineer.
 ALLOWED CHOICES: send_devin = ask Devin to fix the feed (real engineering);
 disable_feed = turn the feed off manually (safe, loses users).
 If send_devin, put any single instruction the player gave Devin into \`constraint\` (max 200 chars).`
@@ -65,11 +64,10 @@ YOUR ROLE: the investor. Offer is fixed: EUR 500 for 20%. Do not change terms. B
 ALLOWED CHOICES: accept = player takes the bridge; decline = player stays independent.
 Resolve after at most two player turns.`
   } else {
-    const speakers = [...new Set(event.dialogue.map((l) => l.who).filter((w) => w !== 'kirill'))].map((w) => SPEAKER[w] ?? w)
     const choices = event.choices.map((c) => `${c.id} = "${c.label}"${c.hint ? ` (${c.hint})` : ''}`).join('; ')
     contextText = `CURRENT EVENT: ${event.id} "${event.title}"
 GAME STATE: cash ${s.cash}, users ${s.users}, health ${s.health}, morale ${s.morale}.
-YOUR ROLE: ${speakers.join(' and ')}, cofounders reacting to Kirill.
+YOUR ROLE: Sergio (you), cofounder reacting to Kirill. Other founders' lines are played by the game.
 ALLOWED CHOICES: ${choices}.`
   }
   return { eventId: event.id, contextText, allowedChoices: allowed, linesText: formatLines(event.dialogue) }

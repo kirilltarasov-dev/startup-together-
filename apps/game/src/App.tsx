@@ -8,13 +8,19 @@ import { Play } from './scenes/Play'
 import { Result } from './scenes/Result'
 import { useGame } from './state/gameStore'
 import { useRun } from './state/runStore'
-import { VoiceButton, getLiveClient } from './voice'
+import { VoiceButton, getLiveClient, initTts, ttsSetMuted, ttsVoiceReport } from './voice'
 
 export default function App() {
   const screen = useGame((s) => s.screen)
   // The live session is a singleton and survives screen changes; show a Mute/Disconnect pill off the Play screen.
   const [voiceOn, setVoiceOn] = useState(false)
-  useEffect(() => getLiveClient().subscribe((s) => setVoiceOn(s.status !== 'idle')), [])
+  useEffect(() => getLiveClient().subscribe((s) => { setVoiceOn(s.status !== 'idle'); ttsSetMuted(s.muted) }), [])
+  // Scripted founder lines are spoken locally in distinct per-character voices (independent of the live session).
+  useEffect(() => {
+    const off = initTts()
+    ;(window as unknown as { runwayVoices?: () => Record<string, string> }).runwayVoices = ttsVoiceReport
+    return off
+  }, [])
 
   // Voice (Lane V) → same validated path as buttons. The Play scene consumes runStore.voiceRequest.
   useEffect(() => connectVoiceBridge((event, choiceId, constraint) => {
