@@ -1,0 +1,22 @@
+{
+  "name": "Cognition_AI (2).png",
+  "sourceSha256": "339a66437046494a0a7a8d57a09980553bbd9352bba5d9ed3555952d7d945875",
+  "license": "User-provided Cognition brand asset; no CC0 license claimed",
+  "modification": "Preserved mark, removed white background and made dark/light variants",
+  "size": [
+    558,
+    124
+  ],
+  "outputs": [
+    {
+      "file": "cognition-dark.png",
+      "bytes": 18168,
+      "sha256": "dc513d8247d511d5c727b276bf0de7003201e105329f9d0648a46e153d3e2e2c"
+    },
+    {
+      "file": "cognition-light.png",
+      "bytes": 20540,
+      "sha256": "77d0f824fcd9f96c6a0a40370b95a4c79b1361390c0eed45d0302997a928ab2c"
+    }
+  ]
+}

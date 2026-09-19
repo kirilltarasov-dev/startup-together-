@@ -1,5 +1,9 @@
 # Active Team Handoff
 
+## Master Reorientation — Latest User Authority
+
+The new product requirement is a freely explorable third-person browser world with a visible rigged human, proven physics/controller, replaceable character assets and a phased path to sectors, water, quality tiers and profiling. See PRODUCT_VISION.md and ROADMAP.md; this supersedes the earlier first-person/no-selection/no-physics restrictions. Preserve the existing story/campaign, voice and Devin integration. Work is isolated on `feat/third-person-foundation`; prior release remains on main. The supplied `Cognition_AI (2).png` is approved as a brand input. A further 13-minute window was stated at the 15:04 CEST check; do not claim the entire roadmap can be completed in that window.
+
 Production owner/checklist: [COORDINATOR.md](COORDINATOR.md).
 Playable script draft: [SKIT.md](SKIT.md).
 

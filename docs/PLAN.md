@@ -1,5 +1,17 @@
 # Delivery Plan
 
+## Third Founder FBX (September 19, 2026, 15:07 CEST)
+
+| ID | Owner | Claimed files | Status | Acceptance |
+| --- | --- | --- | --- | --- |
+| CHAR03 | Current graphics/character export session | `scripts/convert-remy.py` namespace handling, `public/assets/founders/sadman-seated.{glb,json}`, `src/scenes/RemyFounder.tsx` asset union and `SceneEnvironment.tsx` founder branch only; focused asset test and this record | DOING | User supplied `Downloads/Ch06_nonPBR.fbx` and a four-minute window. Interpreted as the remaining third founder, not takeover of the separately claimed third-person camera/controller. 65-bone rig and embedded textures verified; export a static seated derivative, preserve source and other owners' work. No commit/push/deploy authorized. |
+
+## Master Third-Person Reorientation (September 19, 2026)
+
+Latest user instruction supersedes the first-person, primitives-only, no-physics and no-character-selection restrictions below. High-quality immersive 3D is mandatory. Branch: `feat/third-person-foundation`, baseline `2bea46f`; previous release remains on main. Current integration owner claims the requested nine architecture documents, AGENTS/HANDOFF authority updates, logo pipeline, `src/characters/`, `src/world/`, World integration, frontend dependencies and associated tests. Preserve story/campaign, voice and Devin infrastructure. No other lane's unfinished edits existed at branch creation.
+
+Phase 0 audit: DONE (existing first-person controls, handwritten collisions, overlay-first flow, static seated characters and eager world mounting identified). First milestone: DOING (Cognition branding, a visible rigged third-person human, Rapier/ecctrl movement/collision/follow camera, preserved story access). Later phases remain pending until measured: water/shoreline, streaming/LOD/quality/telemetry, compression comparison and isolated WebGPU spike. Full city/vehicles/NPC expansion is not approved before the slice passes visual review. The earlier 14:59 cutoff has passed; do not call the reorientation complete based on the prior release's tests.
+
 ## Release Handoff (September 19, 2026, 14:53 CEST)
 
 User explicitly requested pushing all remaining repository work. Runtime campaign and verified graphics are already published at `af8263f`; this follow-up publishes the coordination records and standalone character build/verification scripts. Local source downloads, private environment variables, ignored caches and generated build output remain excluded. Latest checks: 25 tests pass, full production build passes, campaign and demo browser paths passed earlier in this release. Public deployment, live provider behavior and one-hour pacing remain unverified. Storyline continuity/pacing review remains a requested follow-up; do not equate 35 encounters with a measured hour.

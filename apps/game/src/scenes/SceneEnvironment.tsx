@@ -181,11 +181,11 @@ function EnvironmentScene({ scene, mood, active, reducedMotion, surfaces }: Scen
     {(['sadman', 'kirill', 'sergio'] as const).map((id, i) => <group key={id}>
       <Chair x={(i - 1) * 1.8} />
       <Laptop x={(i - 1) * 1.8} mood={mood} />
-      {id !== 'sadman' ? <ErrorBoundary label={`${id}Founder`} fallback={<Founder id={id} x={(i - 1) * 1.8} active={active === id} mood={mood} reducedMotion={reducedMotion} />}>
+      <ErrorBoundary label={`${id}Founder`} fallback={<Founder id={id} x={(i - 1) * 1.8} active={active === id} mood={mood} reducedMotion={reducedMotion} />}>
         <Suspense fallback={<Founder id={id} x={(i - 1) * 1.8} active={active === id} mood={mood} reducedMotion={reducedMotion} />}>
-          <RemyFounder asset={id === 'kirill' ? 'remy' : 'sergio'} x={(i - 1) * 1.8} active={active === id} mood={mood} reducedMotion={reducedMotion} />
+          <RemyFounder asset={id === 'kirill' ? 'remy' : id} x={(i - 1) * 1.8} active={active === id} mood={mood} reducedMotion={reducedMotion} />
         </Suspense>
-      </ErrorBoundary> : <Founder id={id} x={(i - 1) * 1.8} active={active === id} mood={mood} reducedMotion={reducedMotion} />}
+      </ErrorBoundary>
     </group>)}
     {[-2.6, 2.6].map((x) => <group key={x} position={[x, 3.3, -4.5]}>
       <mesh position={[0, -0.18, 0]} castShadow><coneGeometry args={[0.32, 0.24, 24, 1, true]} /><meshStandardMaterial color={M.metal} side={THREE.DoubleSide} /></mesh>

@@ -1,5 +1,11 @@
 # Repository Working Instructions
 
+## Current Governing Direction — Third-Person Reorientation
+
+The user's Master Product + Architecture Reorientation supersedes older camera, primitives-only, no-physics and no-character-selection constraints below. Read `docs/PRODUCT_VISION.md`, `3D_ARCHITECTURE.md`, `RENDERING.md`, `ASSET_PIPELINE.md`, `CHARACTERS.md`, `WORLD_STREAMING.md`, `PERFORMANCE.md`, `ASSET_LICENSES.md` and `ROADMAP.md`. Immersive high-quality 3D is a requirement. Reuse Rapier/ecctrl, rigged human assets and offline Blender processing; keep controller, model, animator and customization separate. Preserve story/voice/Devin infrastructure and real-verification safeguards. Do not describe target streaming, water, animation coverage or WebGPU experiments as implemented without evidence. New configuration stays in `.devin/`; this existing instructions file remains the project entry point.
+
+The user granted an additional 13-minute window at the 15:04 CEST check. First milestone only: supplied Cognition branding plus verified third-person character/controller/camera integration. Preserve the prior main release; later roadmap phases remain pending, not silently dropped.
+
 ## Mission and Authority
 
 Read `docs/HANDOFF.md` first: the latest user approval supersedes earlier proposals.

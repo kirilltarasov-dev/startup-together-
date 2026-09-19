@@ -1,9 +1,10 @@
 import { motion, useReducedMotion } from 'framer-motion'
-import { useRef, useState } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 import type { FounderId, SceneId } from '../state/types'
 import { FirstPersonWorld, type FirstPersonHandle } from '../scenes/FirstPersonWorld'
 import { ErrorBoundary } from './ErrorBoundary'
 import { BigButton } from './ui'
+const ImmersiveWorld = lazy(() => import('../world/ImmersiveWorld').then((module) => ({ default: module.ImmersiveWorld })))
 
 export type Mood = 'idle' | 'alarm' | 'win' | 'lose' | 'devin'
 
@@ -23,7 +24,7 @@ const TINT: Record<Mood, string> = {
 }
 
 /** 3D world (R3F) + DOM overlay. Children render on top of the canvas. */
-export function World({ scene, mood = 'idle', active, shake, children }: { scene: SceneId | 'devin'; mood?: Mood; active?: FounderId; shake?: boolean; children?: React.ReactNode }) {
+function LegacyWorld({ scene, mood = 'idle', active, shake, children }: { scene: SceneId | 'devin'; mood?: Mood; active?: FounderId; shake?: boolean; children?: React.ReactNode }) {
   const controls = useRef<FirstPersonHandle | null>(null)
   const hint = useRef<HTMLOutputElement | null>(null)
   const [exploring, setExploring] = useState(false)
@@ -80,4 +81,8 @@ export function World({ scene, mood = 'idle', active, shake, children }: { scene
       <div inert={exploring} aria-hidden={exploring} className={`${canExplore ? 'world-story' : ''} relative h-full flex flex-col items-center justify-end pb-6 gap-6 px-6 pointer-events-none [&>*]:pointer-events-auto ${exploring ? 'invisible' : ''}`} data-incident={shake || undefined}>{children}</div>
     </div>
   )
+}
+
+export function World(props: { scene: SceneId | 'devin'; mood?: Mood; active?: FounderId; shake?: boolean; children?: React.ReactNode }) {
+  return new URLSearchParams(window.location.search).get('world') === 'legacy' ? <LegacyWorld {...props} /> : <Suspense fallback={<section className="h-full bg-panel p-8 text-mint">Loading third-person world…</section>}><ImmersiveWorld {...props} /></Suspense>
 }

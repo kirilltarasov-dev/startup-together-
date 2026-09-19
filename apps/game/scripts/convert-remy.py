@@ -23,6 +23,14 @@ bpy.ops.import_scene.fbx(filepath=str(args.source), use_image_search=False)
 scene = bpy.context.scene
 scene.frame_set(1)
 rig = next(obj for obj in scene.objects if obj.type == 'ARMATURE')
+for bone in rig.data.bones:
+    original = bone.name
+    normalized = 'mixamorig:' + original.rsplit(':', 1)[-1]
+    if original != normalized:
+        bone.name = normalized
+        for obj in scene.objects:
+            if obj.type == 'MESH' and original in obj.vertex_groups:
+                obj.vertex_groups[original].name = normalized
 source_actions = [(action.name, list(action.frame_range)) for action in bpy.data.actions]
 rig.animation_data_clear()
 for bone in rig.pose.bones:

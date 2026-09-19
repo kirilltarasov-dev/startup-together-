@@ -1,0 +1,20 @@
+{
+  "source": "Ch06_nonPBR.fbx",
+  "sourceSha256": "464522558116b1c1a7c532f49dd74f01d290a608d3123e168a01d206f4516d31",
+  "sourceActions": [
+    [
+      "Armature|mixamo.com|Layer0",
+      [
+        1.0,
+        2.0
+      ]
+    ]
+  ],
+  "pose": "Locally fitted static seated pose; not a supplied seated animation",
+  "bones": 65,
+  "meshes": 1,
+  "vertices": 27341,
+  "maxTextureDimension": 1024,
+  "outputBytes": 3531328,
+  "outputSha256": "4ac3c1ee8a9b4237136019cd7e07143b6abe5b35c4b23bcf2f9f5cf8b8ef4603"
+}

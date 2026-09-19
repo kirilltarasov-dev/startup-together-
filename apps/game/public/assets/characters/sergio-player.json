@@ -1,0 +1,13 @@
+{
+  "source": "sergio-reference.glb",
+  "sourceSha256": "9a17706172208cbfd849e0bed81e3548ab1331bb3ccb58d2cfde88a81e82ea85",
+  "outputBytes": 6683476,
+  "outputSha256": "7a58aefcd018379bb7abf3c1c84174670ed9711d454f57168e15a1d065e66a36",
+  "clips": [
+    "Face_Blink_And_Speech",
+    "Idle",
+    "Talking",
+    "Walk"
+  ],
+  "note": "User-authorized Remy-derived Sergio. Locally authored prototype loops, not mocap; run/jump/land clips not supplied."
+}

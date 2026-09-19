@@ -53,6 +53,7 @@ export function Opening() {
               RUNWAY
             </motion.h1>
             <p className="mt-3 opacity-60 tracking-widest text-sm">A STARTUP SURVIVAL GAME · POWERED BY DEVIN</p>
+            <img src="/assets/branding/cognition-light.png" alt="Cognition" width={558} height={124} className="mx-auto mt-5 h-8 w-auto" />
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="mt-12">
               <div className="flex flex-wrap justify-center gap-3 px-4">
                 <BigButton onClick={() => { useRun.getState().clearMission(); sfx('deploy'); start('demo') }}>START RUNWAY</BigButton>

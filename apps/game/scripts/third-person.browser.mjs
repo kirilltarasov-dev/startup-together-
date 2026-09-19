@@ -1,0 +1,60 @@
+import assert from 'node:assert/strict'
+import { mkdir } from 'node:fs/promises'
+import puppeteer from 'puppeteer-core'
+
+const output = new URL('../node_modules/.cache/runway-third-person/', import.meta.url).pathname
+await mkdir(output, { recursive: true })
+const browser = await puppeteer.launch({ executablePath: '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser', headless: true, args: ['--enable-webgl', '--enable-unsafe-swiftshader', '--no-first-run'] })
+const page = await browser.newPage()
+const errors = []
+page.on('pageerror', (error) => errors.push(error.message))
+page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
+const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+async function click(label) {
+  await page.waitForFunction((text) => [...document.querySelectorAll('button')].some((b) => b.textContent.includes(text) && b.checkVisibility()), { timeout: 20000 }, label)
+  for (const b of await page.$$('button')) if (await b.evaluate((el, text) => el.textContent.includes(text) && el.checkVisibility(), label)) { await b.evaluate((el) => el.scrollIntoView({ block: 'center' })); await b.click(); return }
+}
+try {
+  await page.setViewport({ width: 1440, height: 900 })
+  await page.goto(process.env.TEST_URL ?? 'http://127.0.0.1:5185', { waitUntil: 'networkidle0' })
+  await page.mouse.click(720, 450)
+  await wait(1500)
+  await page.screenshot({ path: output + 'branding.png' })
+  await click('START RUNWAY')
+  await page.waitForSelector('canvas[data-character="sergio"]', { timeout: 30000 })
+  await wait(1700)
+  await page.screenshot({ path: output + 'spawn.png' })
+  const before = await page.$eval('canvas', (c) => c.dataset.position)
+  await page.keyboard.down('s')
+  await wait(1000)
+  await page.keyboard.up('s')
+  await wait(400)
+  const after = await page.$eval('canvas', (c) => c.dataset.position)
+  console.log('POSITION', { before, after })
+  assert.notEqual(before, after, 'Input moves the physical player')
+  await page.screenshot({ path: output + 'walking.png' })
+  await click('TALK TO FOUNDERS')
+  await click('Founders only')
+  await click('CONTINUE')
+  await click('Test the launch')
+  await click('CONTINUE')
+  await click('OF COURSE')
+  await click('TALK TO FOUNDERS')
+  await click('Save every forint')
+  await click('CONTINUE')
+  await click('Disable the feed')
+  await click('CONTINUE')
+  await click('WALK THERE')
+  await click('TALK TO FOUNDERS')
+  await click('Take the bridge')
+  await click('CONTINUE')
+  await wait(600)
+  await page.screenshot({ path: output + 'ending.png' })
+  assert.ok((await page.evaluate(() => document.body.innerText)).includes('RUNWAY COMPLETE'))
+  assert.deepEqual(errors, [])
+  console.log('THIRD_PERSON_PASS', JSON.stringify({ before, after, errors, output }))
+} catch (error) {
+  await page.screenshot({ path: output + 'failure.png' }).catch(() => {})
+  console.log('BROWSER_ERRORS', errors)
+  throw error
+} finally { await browser.close() }
