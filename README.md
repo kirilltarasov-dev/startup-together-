@@ -67,3 +67,16 @@ cd apps/game && npm i && npm run dev        # http://localhost:5173
 - Devin's GitHub app must have access to the repo so it can push branches.
 - Local fallback: run both on the presenter's laptop; backend can use the Devin CLI (`AGENT_BACKEND=cli`) instead of the API.
 - If anything is down: set `VITE_AGENT_MODE=cached` on Vercel. The game replays a recorded real Devin run.
+
+## Production Docs (frozen 12:55 CEST — read before coding)
+
+| File | Purpose |
+| --- | --- |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | Latest approved decisions, lanes A/B/C/V, cut order |
+| [docs/SKIT.md](docs/SKIT.md) | Frozen script: every event, line, choice ID, effect |
+| [docs/DIRECTION.md](docs/DIRECTION.md) | 3D spec: camera, palette, primitives, drei helpers, 8 animations, movement |
+| [docs/VOICE.md](docs/VOICE.md) | gpt-live-1 contract: system prompt, `choose` tool, per-event context |
+| [docs/DEVIN_CONTRACT.md](docs/DEVIN_CONTRACT.md) | Mission lifecycle, verifier, LIVE / CACHED / MOCK honesty |
+| [docs/PLAN.md](docs/PLAN.md) | Milestones, task board, decisions |
+| [docs/COLLEAGUE_SETUP_PROMPT.md](docs/COLLEAGUE_SETUP_PROMPT.md) | Paste-ready infra setup for the key/hosting owner |
+| [AGENTS.md](AGENTS.md) | Working rules for coding agents |
