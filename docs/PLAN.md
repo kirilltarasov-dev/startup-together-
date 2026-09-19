@@ -1,5 +1,19 @@
 # Delivery Plan
 
+## Polish Phase 1 — Locomotion, Locations, Ambient Motion (September 19, 2026, evening)
+
+Branch `feat/polish-integration` (base main@012d2cb; workstream branches feat/polish-{locomotion,ambient,environment} merged). Not pushed or deployed. Integrator: Devin (this window).
+
+| ID | Area | Status | Evidence |
+| --- | --- | --- | --- |
+| POL-A | Velocity-driven animation state machine, calibrated gait, human-weight Ecctrl fit, unified collider spec, camera clamp, breathing/blink, Mixamo drop-in path | DONE (with flagged fallbacks) | `locomotion.test.ts` 7/7; TP route: idle>walk>run>jump_takeoff>airborne>land, takeoffs 1 / landings 1, minCamDist 1.20, apex 0.85 m, facing 1.00 |
+| POL-B | Three distinct locations, per-scene lighting table, real-scale materials, lived-in props, asset shrink | DONE | route transfer 33.6 -> 23.7 MB (FP), spawn luminance S1 99 / S2 28 / S3 126 (was 104/109/110); zero page errors |
+| POL-C | Shared wind (grass + tree), distant birds (daytime), footstep tracker | DONE | 12 new tests; grass budget unchanged 58,400 / 496k / 3 draws; 60 s route p50 16.7 ms, 0 hitches |
+| POL-INT | Hooks wired (tree wind, birds, footsteps), tests registered | DONE | tsc/lint clean, 46/46 tests, build ok; FP story regression PASS (Chrome) |
+
+Known limitations: no run/jump/fall/land clips exist (walk-as-run and frozen mid-stride airborne are flagged fallbacks; the authored Walk loop is a 0.19 m/s shuffle so foot sliding is inherent until real clips are supplied via `public/assets/animations/manifest.json`); camera obstruction clamp rises to a near top-down view in tight corners; no foot IK; no night HDR (S2 uses dimmed daylight HDR + below-horizon sky); footstep samples are stand-ins from the shipped UI set; headless Chrome frame times are vsync-capped and not a GPU-headroom measurement; the third-person browser story script has a pre-existing Chrome-only timeout after "OF COURSE" (locomotion assertions pass).
+
+
 ## Camera View Choice (September 19, 2026)
 
 Current integration session claims `components/World.tsx`, `world/ImmersiveWorld.tsx`, `scripts/third-person.browser.mjs` and this record. Status: REVIEW. User requested first-person alongside third-person after the merge and explicitly requested immediate push. Added toolbar switches using the existing first-person renderer; selection is retained in the URL without reloading the page. Switching resets exploration position. Production build, 26 logic/asset tests and focused source lint pass. Desktop/narrow browser regression has been extended; initial run clicked before the first-person controller loaded, and the rerun waits for assets. Full browser verification and live deployment verification are pending at publication.
