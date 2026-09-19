@@ -30,27 +30,18 @@ export interface LiveClient {
   subscribe(cb: (s: VoiceState) => void): () => void
 }
 
-// Identical to apps/game/api/voice/session.ts (delegation object must always be sent whole).
-const CHOOSE_TOOL = {
-  type: 'function',
-  name: 'choose',
-  description: 'Resolve the current event to exactly one allowed choice. Call exactly once per event.',
-  parameters: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      eventId: { type: 'string' },
-      choiceId: { type: 'string' },
-      constraint: { type: 'string', description: 'E04 only. One short instruction for Devin, max 200 chars, or empty.' },
-    },
-    required: ['eventId', 'choiceId'],
-  },
-}
+/**
+ * Complete delegation.responses config, as minted by /api/voice/session (non-secret: deployment
+ * name, router prompt, tool schema, token budget, verbosity, reasoning). Azure replaces
+ * `delegation` as ONE object on session.update, so we always resend it whole with only
+ * `instructions` (event context appended) and `tool_choice` changed.
+ */
+type ResponsesConfig = Record<string, unknown> & { instructions?: string; tool_choice?: string }
 
-const BASE = 'You are the RUNWAY game voice. Follow CURRENT EVENT and call choose exactly once with an ALLOWED CHOICE.'
 const SESSION_CAP_MS = 10 * 60 * 1000
 const IDLE_NULL_CTX_MS = 10 * 60 * 1000
 const ICE_GATHER_TIMEOUT_MS = 1000
+/** UI indicator only: how long after the last transcript delta we keep showing "speaking". Not audio speed. */
 const SPEAKING_SETTLE_MS = 1200
 
 let eventCounter = 0
@@ -96,12 +87,21 @@ export function createLiveClient(): LiveClient {
   let stream: MediaStream | null = null
   let audioEl: HTMLAudioElement | null = null
   let started = false
-  let sessionUpdateBroken = false
   let unsubCtx: (() => void) | null = null
   let capTimer: ReturnType<typeof setTimeout> | null = null
   let nullCtxTimer: ReturnType<typeof setTimeout> | null = null
   let speakTimer: ReturnType<typeof setTimeout> | null = null
   let lastCtxId: string | null = null
+  /** Full delegation.responses from the server; null until the session response arrives. */
+  let baseResponses: ResponsesConfig | null = null
+  /** Dedupe: last context text pushed to the session. engine.ts re-syncs on every store change. */
+  let lastPushedText: string | null = null
+  /** Events already resolved by a choose call; repeat calls are acknowledged but not dispatched. */
+  const resolvedEvents = new Set<string>()
+  // Latency probes (console only). Separate: cold connect, speech->first reply, choice->action.
+  let tConnectStart = 0
+  let tLastHeard = 0
+  let tFirstReplyAfterHeard = 0
 
   const set = (patch: Partial<VoiceState>) => {
     state = { ...state, ...patch }
@@ -121,24 +121,27 @@ export function createLiveClient(): LiveClient {
     }
   }
 
-  const pushContext = (ctx: VoiceContext) => {
-    if (!started) return
-    send({ type: 'session.instructions.append', delegation_id: null, content: ctx.contextText })
-    if (sessionUpdateBroken) return
-    send({
+  /** Resend the complete delegation.responses with event context appended and the given tool_choice. */
+  const sendDelegation = (contextText: string, toolChoice: 'required' | 'none') => {
+    if (!baseResponses) return false
+    const base = typeof baseResponses.instructions === 'string' ? baseResponses.instructions : ''
+    return send({
       type: 'session.update',
       session: {
         delegation: {
           type: 'responses',
-          responses: {
-            instructions: `${BASE}\n\n${ctx.contextText}`,
-            tools: [CHOOSE_TOOL],
-            tool_choice: 'required',
-            parallel_tool_calls: false,
-          },
+          responses: { ...baseResponses, instructions: `${base}\n\n${contextText}`, tool_choice: toolChoice },
         },
       },
     })
+  }
+
+  const pushContext = (ctx: VoiceContext) => {
+    if (!started) return
+    if (ctx.contextText === lastPushedText) return
+    lastPushedText = ctx.contextText
+    send({ type: 'session.instructions.append', delegation_id: null, content: ctx.contextText })
+    sendDelegation(ctx.contextText, resolvedEvents.has(ctx.eventId) ? 'none' : 'required')
   }
 
   const onCtx = (ctx: VoiceContext | null) => {
@@ -162,19 +165,32 @@ export function createLiveClient(): LiveClient {
   }
 
   const handleToolCall = (item: { call_id?: string; arguments?: string }) => {
+    const t0 = performance.now()
     let ok = false
+    let output = 'rejected: illegal or stale choice'
+    let eventId = ''
     try {
       const args = JSON.parse(item.arguments ?? '{}') as { eventId?: string; choiceId?: string; constraint?: string }
-      ok = dispatchVoiceChoice(String(args.eventId ?? ''), String(args.choiceId ?? ''), typeof args.constraint === 'string' ? args.constraint : undefined)
-      if (!ok) console.warn('[voice] choose rejected', args)
+      eventId = String(args.eventId ?? '')
+      if (resolvedEvents.has(eventId)) {
+        output = 'already chosen for this event; do not call choose again'
+        console.info('[voice] duplicate choose ignored', eventId)
+      } else {
+        ok = dispatchVoiceChoice(eventId, String(args.choiceId ?? ''), typeof args.constraint === 'string' ? args.constraint : undefined)
+        if (ok) { resolvedEvents.add(eventId); output = 'ok' } else console.warn('[voice] choose rejected', args)
+      }
     } catch (e) {
       console.warn('[voice] bad choose arguments', item.arguments, e)
     }
+    console.info('[voice:metrics] choice->action ms', Math.round(performance.now() - t0), { eventId, ok })
     set({ caption: '' })
     send({
       type: 'response.item.create',
-      item: { type: 'function_call_output', call_id: item.call_id, output: ok ? 'ok' : 'rejected: illegal or stale choice' },
+      item: { type: 'function_call_output', call_id: item.call_id, output },
     })
+    // Continuation must not be forced into another choose call: flip tool_choice to none
+    // (whole delegation object resent), then continue so the voice can react.
+    if (lastPushedText) sendDelegation(lastPushedText, 'none')
     send({ type: 'response.create' })
   }
 
@@ -185,6 +201,12 @@ export function createLiveClient(): LiveClient {
     switch (type) {
       case 'session.started': {
         started = true
+        if (tConnectStart) console.info('[voice:metrics] cold connect ms', Math.round(performance.now() - tConnectStart))
+        // Prefer the server-echoed config; fall back to what Azure reports in session.started.
+        if (!baseResponses) {
+          const sess = msg.session as { delegation?: { responses?: ResponsesConfig } } | undefined
+          if (sess?.delegation?.responses) baseResponses = sess.delegation.responses
+        }
         set({ status: 'listening', reason: undefined })
         const ctx = getVoiceContext()
         if (ctx) { lastCtxId = ctx.eventId; pushContext(ctx) }
@@ -192,12 +214,17 @@ export function createLiveClient(): LiveClient {
       }
       case 'session.output_transcript.delta': {
         const delta = typeof msg.delta === 'string' ? msg.delta : ''
+        if (tLastHeard && !tFirstReplyAfterHeard) {
+          tFirstReplyAfterHeard = performance.now()
+          console.info('[voice:metrics] speech->first reply transcript ms', Math.round(tFirstReplyAfterHeard - tLastHeard))
+        }
         set({ caption: (state.caption + delta).slice(-400) })
         markSpeaking()
         return
       }
       case 'session.input_transcript.delta': {
         const delta = typeof msg.delta === 'string' ? msg.delta : ''
+        tLastHeard = performance.now(); tFirstReplyAfterHeard = 0
         set({ heard: (state.heard + delta).slice(-200) })
         return
       }
@@ -218,12 +245,6 @@ export function createLiveClient(): LiveClient {
       case 'error': {
         console.warn('[voice] server error event', msg)
         const err = (msg.error ?? msg) as Record<string, unknown>
-        const text = JSON.stringify(err).toLowerCase()
-        if (text.includes('model') && !sessionUpdateBroken) {
-          sessionUpdateBroken = true
-          console.warn('[voice] session.update rejected (model); relying on instructions.append only')
-          return
-        }
         const short = typeof err.message === 'string' ? err.message : 'voice error'
         set({ caption: `(${short.slice(0, 80)})` })
         return
@@ -247,6 +268,10 @@ export function createLiveClient(): LiveClient {
     stream = null; dc = null; pc = null; audioEl = null
     started = false
     lastCtxId = null
+    baseResponses = null
+    lastPushedText = null
+    resolvedEvents.clear()
+    tConnectStart = 0; tLastHeard = 0; tFirstReplyAfterHeard = 0
   }
 
   function disconnect(reason?: string) {
@@ -264,6 +289,7 @@ export function createLiveClient(): LiveClient {
   async function connect(): Promise<void> {
     if (active()) return
     set({ status: 'connecting', reason: undefined, caption: '', heard: '' })
+    tConnectStart = performance.now()
     try {
       if (typeof window === 'undefined' || !('RTCPeerConnection' in window) || !navigator.mediaDevices?.getUserMedia) {
         fail('browser not supported'); return
@@ -320,6 +346,9 @@ export function createLiveClient(): LiveClient {
       try { json = await res.json() } catch { fail('bad server response'); return }
       const answer = extractAnswerSdp(json)
       if (!answer) { console.warn('[voice] no SDP answer in response', Object.keys((json as object) ?? {})); fail('no SDP answer'); return }
+      const runway = (json as { runway?: { responses?: ResponsesConfig; voice?: string } }).runway
+      if (runway?.responses) baseResponses = runway.responses
+      if (runway?.voice) console.info('[voice] session voice', runway.voice)
       await localPc.setRemoteDescription({ type: 'answer', sdp: answer })
       if (pc !== localPc) return
 
