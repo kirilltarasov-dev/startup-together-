@@ -59,7 +59,6 @@ python3 -m venv .venv && .venv/bin/pip install fastapi uvicorn pytest httpx
 cd apps/game && npm i && npm run dev        # http://localhost:5173
 ```
 
-If you're behind the BMW proxy, `unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY` first.
 
 ## Deploy
 
