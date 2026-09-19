@@ -64,11 +64,14 @@ Use separate branches/checkouts; never share an active worktree between agents.
 
 | Lane | Branch suggestion | Exclusive write area | Claim |
 | --- | --- | --- | --- |
-| A: game/UI | `feat/game-loop` | `apps/game/src/engine`, `state`, `events`, `components`, `App.tsx`, app config/lockfile, movement input | UNCLAIMED (Teammate 1) |
-| B: 3D | `feat/three-scenes` | `apps/game/src/scenes`, `apps/game/public/assets` | UNCLAIMED |
-| C: Devin/backend | `feat/orchestrator` | `services/orchestrator`, `apps/game/src/agents`, mission fixtures, Railway config, challenge repo | Devin (director window) |
-| V: voice | `feat/voice` | `apps/game/src/voice`, `apps/game/api/voice/*` (Vercel route) | UNCLAIMED (Teammate 2) |
+| A: game/UI | `feat/game-loop` | `apps/game/src/engine`, `state`, `events`, `components`, `App.tsx`, app config/lockfile, movement input, `apps/game/src/agents` (interface + mock/cached) | **Kirill** (claimed 12:50) |
+| B: 3D | `feat/three-scenes` | `apps/game/src/scenes`, `apps/game/public/assets` | **Kirill** (after A; 2.5D greybox ships if 3D slips) |
+| C: Devin/backend | `feat/orchestrator` | `services/orchestrator`, `apps/game/src/agents/httpAgent.ts`, `cache/`, Railway config | **Sadman** — prompt: [LANE_C_SADMAN.md](LANE_C_SADMAN.md) |
+| V: voice | `feat/voice` | `apps/game/src/voice`, `apps/game/api/voice/*` (Vercel route) | **Sergio** — prompt: [LANE_V_SERGIO.md](LANE_V_SERGIO.md) |
 | Direction | Devin (director window) | `docs/` freeze files | Devin, with Codex coordination |
+
+Game <-> voice interface: `apps/game/src/state/voiceBridge.ts` (owned by A, consumed by V).
+Game <-> backend interface: MissionStatus JSON in [LANE_C_SADMAN.md](LANE_C_SADMAN.md) TASK 2 (owned by C, consumed by A).
 
 A owns the frontend lockfile: B/C request dependency additions instead of
 concurrently editing it. A/C freeze interfaces first; B consumes shared state
