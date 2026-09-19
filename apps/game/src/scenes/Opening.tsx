@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { BigButton } from '../components/ui'
 import { useGame } from '../state/gameStore'
+import { sfx } from '../state/sfx'
 
 const CARDS: Array<string[]> = [
   ['OBUDA, BUDAPEST', 'SEPTEMBER 19, 2026'],
@@ -49,7 +50,7 @@ export function Opening() {
             </motion.h1>
             <p className="mt-3 opacity-60 tracking-widest text-sm">A STARTUP SURVIVAL GAME · POWERED BY DEVIN</p>
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }} className="mt-12">
-              <BigButton onClick={() => setScreen('play')}>START RUNWAY</BigButton>
+              <BigButton onClick={() => { sfx('deploy'); setScreen('play') }}>START RUNWAY</BigButton>
             </motion.div>
           </motion.div>
         )}

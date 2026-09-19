@@ -4,6 +4,7 @@ import { BigButton } from '../components/ui'
 import { World } from '../components/World'
 import { RESULT_LINE } from '../events/skit'
 import { FOUNDERS, useGame } from '../state/gameStore'
+import { sfx } from '../state/sfx'
 
 /** Hackathon result interstitial (docs/SKIT.md). One click. */
 export function Result() {
@@ -11,7 +12,7 @@ export function Result() {
   const [step, setStep] = useState(0)
 
   useEffect(() => {
-    if (step === 2) g.apply({ users: 1 })
+    if (step === 2) { g.apply({ users: 1 }); sfx('chime') }
     if (step >= 3) return
     const t = setTimeout(() => setStep(step + 1), step === 0 ? 1400 : 1600)
     return () => clearTimeout(t)

@@ -12,8 +12,10 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "framer-motion": "^13.4.0",
+    "howler": "^2.2.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-sounds": "^1.0.30",
     "tailwindcss": "^4.3.3",
     "zustand": "^5.0.15"
   },

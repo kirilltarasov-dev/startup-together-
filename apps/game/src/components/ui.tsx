@@ -1,5 +1,6 @@
 import { motion, type HTMLMotionProps } from 'framer-motion'
 import type { Choice } from '../state/types'
+import { sfx } from '../state/sfx'
 
 const KIND: Record<NonNullable<Choice['kind']>, string> = {
   normal: 'border-line hover:border-white/50 bg-panel',
@@ -17,7 +18,7 @@ export function ChoiceButton({ choice, index, onClick, disabled }: { choice: Cho
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
       disabled={disabled}
-      onClick={onClick}
+      onClick={() => { sfx(choice.kind === 'devin' ? 'deploy' : 'click'); onClick() }}
       className={`text-left rounded-lg border px-4 py-3 transition-colors disabled:opacity-40 ${KIND[choice.kind ?? 'normal']}`}
     >
       <div className="flex items-center gap-3">

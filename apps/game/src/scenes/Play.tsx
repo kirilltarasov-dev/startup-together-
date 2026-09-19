@@ -9,6 +9,7 @@ import { DISABLE_FEED_SECOND, EVENTS, MISSION_LINES } from '../events/skit'
 import { useGame } from '../state/gameStore'
 import { useRun } from '../state/runStore'
 import type { Choice, FounderId, GameEvent, Line } from '../state/types'
+import { sfx } from '../state/sfx'
 
 /**
  * The event loop across S1/S2/S3. Buttons and voice both end up in `choose()`.
@@ -31,7 +32,7 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
     setReaction(null)
     if (event.onEnter) {
       g.apply(event.onEnter)
-      if (event.id === 'E04') { setShake(true); setTimeout(() => setShake(false), 600) }
+      if (event.id === 'E04') { sfx('incident', 0.7); setShake(true); setTimeout(() => setShake(false), 600) }
     }
   }, [event?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -58,7 +59,8 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
     }
     const applied = resolveChoice(event, c.id)
     if (!applied) return
-    if (c.kind === 'danger') { setShake(true); setTimeout(() => setShake(false), 500) }
+    if (c.kind === 'danger') { sfx('error'); setShake(true); setTimeout(() => setShake(false), 500) }
+    if (c.kind === 'money') sfx('cash')
     const lines: Line[] = applied.reaction ? [applied.reaction] : []
     if (c.id === 'disable_feed') { lines.push(DISABLE_FEED_SECOND); g.set({ missionOutcome: 'skipped' }) }
     setReaction(lines)
@@ -83,6 +85,7 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
 
   const walkThroughDoor = () => {
     const nextEv = EVENTS[g.eventIndex + 1]
+    sfx('door')
     setDoor(false)
     g.goScene(nextEv.scene)
     g.nextEvent()

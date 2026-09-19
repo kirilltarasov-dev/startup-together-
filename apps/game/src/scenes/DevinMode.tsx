@@ -11,6 +11,7 @@ import { MISSION_EFFECTS } from '../engine/engine'
 import { MISSION_LINES, WAITING_LINES } from '../events/skit'
 import { FOUNDERS, useGame } from '../state/gameStore'
 import { useRun } from '../state/runStore'
+import { sfx } from '../state/sfx'
 
 const MISSION_PROMPT = `Work ONLY inside startup-repo/ of kirilltarasov-dev/startup-together- (FastAPI + SQLite).
 Production incident: GET /feed is extremely slow under load. Fix the bottleneck in backend/feed.py while preserving
@@ -53,6 +54,7 @@ export function DevinMode() {
         try {
           const st = await a.getStatus(id)
           if (st.runId && st.runId !== g.runId) return // stale result from an earlier game
+          if (st.phase === 'awaiting_verification' && status?.phase !== 'awaiting_verification') sfx('chime', 0.4)
           setStatus(st); run.setStatus(st)
           if (!TERMINAL.has(st.phase)) pollRef.current = window.setTimeout(poll, a.mode === 'live' ? 3000 : 1000)
         } catch (e) { setError(String(e)) }
@@ -64,6 +66,7 @@ export function DevinMode() {
   useEffect(() => { launch(); return () => { if (pollRef.current) window.clearTimeout(pollRef.current) } }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (terminal) return; const iv = setInterval(() => setElapsed((e) => e + 1), 1000); return () => clearInterval(iv) }, [terminal])
   useEffect(() => { if (terminal) return; const iv = setInterval(() => setLineIdx((i) => (i + 1) % WAITING_LINES.length), 20000); return () => clearInterval(iv) }, [terminal])
+  useEffect(() => { if (result) sfx(result.success ? 'win' : 'lose', 0.8) }, [result?.success]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { logRef.current?.scrollTo({ top: 1e9, behavior: 'smooth' }) }, [status?.log.length])
 
   const finish = (r: MissionResult | null, outcome: 'success' | 'failure' | 'skipped') => {
