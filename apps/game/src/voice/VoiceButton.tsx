@@ -66,7 +66,8 @@ export default function VoiceButton() {
         )}
 
         {s.status === 'connecting' && (
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs tracking-widest uppercase opacity-70">
+          <>
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs tracking-widest uppercase opacity-70">
             <motion.span
               className="inline-block w-3 h-3 rounded-full border-2 border-white/30 border-t-white"
               animate={{ rotate: 360 }}
@@ -74,7 +75,17 @@ export default function VoiceButton() {
               aria-hidden="true"
             />
             Connecting
-          </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => client.disconnect()}
+              aria-label="Cancel voice connection"
+              title="Cancel connection"
+              className={ICON_BTN}
+            >
+              <CloseIcon />
+            </button>
+          </>
         )}
 
         {connected && (
@@ -95,7 +106,7 @@ export default function VoiceButton() {
             <button
               type="button"
               onClick={() => client.setMuted(!s.muted)}
-              aria-label={s.muted ? 'Unmute microphone' : 'Mute microphone'}
+              aria-label={s.muted ? 'Unmute voice' : 'Mute voice'}
               aria-pressed={s.muted}
               title={s.muted ? 'Unmute' : 'Mute'}
               className={ICON_BTN}
