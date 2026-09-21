@@ -1,16 +1,14 @@
 // Stage manager: the ONE serialized speech queue for RUNWAY. One speaker at a time.
-// Sole subscriber of voiceBridge.subscribeSpeak. Routes each scripted line to the live Azure
-// voice (Sergio / Investor when a session is up) or to local TTS (tts.ts), waits for it to finish,
-// and never talks over the live model.
+// Sole subscriber of voiceBridge.subscribeSpeak. Scripted dialogue uses character TTS;
+// live conversation belongs to Azure. Script completion uses actual TTS end/cancel events.
 //
 // It also owns the CONVERSATION FLOOR (exactly one holder) and the mic-to-Azure policy that
-// follows from it. The demo runs over laptop speakers, so echo is solved here, in code:
-//   narrating   a scripted line (TTS or sayAsLive) is playing            -> mic to Azure CLOSED
+// follows from it. Scripted output holds capture to reduce speaker echo:
+//   narrating   a scripted line is playing                             -> mic to Azure CLOSED
 //   processing  a choose is in flight (client.isChooseInFlight())        -> mic CLOSED
 //   live_reply  Sergio is answering (live audio energy, no scripted line) -> mic OPEN (Azure AEC handles its own output)
 //   listening   default                                                   -> mic OPEN
-// The user's Mute always wins (liveClient.applyMic). Barge-in comes ONLY from the echo-filtered
-// local ear (commandEar.ts -> stageCut) and from clicks/keys; never from Azure's input transcript.
+// The user's Mute always wins (liveClient.applyMic). No secondary browser recognizer runs.
 
 import { subscribeSpeak, type SpeakPayload } from '../state/voiceBridge'
 import { getLiveClient } from './voiceSession'
@@ -43,10 +41,7 @@ let floor: Floor = 'listening'
 const floorListeners = new Set<(f: Floor) => void>()
 /** True from the start of playLine until the line's audio is done (drives 'narrating'). */
 let narratingLine = false
-/**
- * Echo-filter reference for commandEar: the scripted line playing right now, or the last line
- * handed to the live voice (its audio lags the request by 1-2 s, so it stays after resolve).
- */
+/** The scripted line currently holding the floor. */
 let speakingText = ''
 
 export function getFloor(): Floor { return floor }
@@ -76,29 +71,24 @@ function recomputeFloor(): void {
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
-async function waitUntil(ok: () => boolean, maxMs: number): Promise<void> {
+async function waitUntil(ok: () => boolean, maxMs: number, gen: number): Promise<boolean> {
   const until = performance.now() + maxMs
-  while (!ok() && performance.now() < until) await sleep(POLL_MS)
+  while (gen === generation && !ok() && performance.now() < until) await sleep(POLL_MS)
+  return gen === generation && ok()
 }
 
-/** Live voice if a session is up (Sergio / Investor), else per-character local TTS. Holds the floor as 'narrating'. */
+/** Scripted characters retain their own voice while a live session is connected. */
 async function playLine(line: Line): Promise<void> {
-  const client = getLiveClient()
   narratingLine = true
   speakingText = line.text
   recomputeFloor() // closes the mic BEFORE any audio starts
-  let viaLive = false
   try {
-    if (line.who === 'sergio' || line.who === 'investor') {
-      viaLive = await client.sayAsLive(line.text)
-      if (viaLive) return
-    }
     if (ttsIsMuted()) return
     await speakLine(line.who, line.text)
     await sleep(MIC_RELEASE_MS) // speaker tail
   } finally {
     narratingLine = false
-    if (!viaLive) speakingText = '' // live lines keep their text: the audio may still be in flight
+    speakingText = ''
     recomputeFloor()
   }
 }
@@ -114,10 +104,16 @@ async function run(): Promise<void> {
         const line = current.lines.shift()!
         const client = getLiveClient()
         // Gate: never start a line while a choose is being routed or the live voice's audio is playing.
-        await waitUntil(() => !client.isChooseInFlight(), WAIT_CHOOSE_MAX_MS)
-        await waitUntil(() => !client.isLiveSpeaking(), WAIT_LIVE_SPEAKING_MAX_MS)
+        const ready = await waitUntil(
+          () => !client.isChooseInFlight() && !client.isLiveSpeaking(),
+          Math.max(WAIT_CHOOSE_MAX_MS, WAIT_LIVE_SPEAKING_MAX_MS),
+          gen,
+        )
         if (gen !== generation) break
+        // Never start competing output when the live floor does not clear.
+        if (!ready) { current.lines.length = 0; break }
         await playLine(line)
+        if (gen !== generation) break
         if (current.lines.length || queue.length) await sleep(GAP_MS)
       }
       current = null
@@ -140,6 +136,8 @@ function onPayload(p: SpeakPayload): void {
   } else if (p.tag.endsWith(':dialogue')) {
     // New event: let the current line finish, drop the rest of the old tag, then this tag.
     if (current) current.lines.length = 0
+    if (current && !narratingLine) generation++
+    queue.length = 0
     queue.push(job)
   } else {
     queue.push(job)
@@ -148,14 +146,13 @@ function onPayload(p: SpeakPayload): void {
 }
 
 /**
- * Barge-in / skip: cut the current scripted line and drop the rest of its tag. Called by the
- * echo-filtered local ear (commandEar) and by UI actions. Returns true if anything was cut.
- * A live (sayAsLive) line cannot be stopped mid-air; its remaining tag lines are still dropped.
+ * Cut the current scripted line and drop the rest of its tag.
  */
 export function stageCut(): boolean {
-  const had = !!current && (current.lines.length > 0 || narratingLine)
+  const had = current !== null
+  if (had) generation++
   if (current) current.lines.length = 0 // tag already in `consumed`
-  ttsCancel() // resolves the pending speakLine via onerror/onend
+  ttsCancel()
   return had
 }
 
@@ -167,6 +164,7 @@ export function stageInit(): () => void {
   return () => {
     unsubSpeak?.(); unsubSpeak = null
     if (floorTimer) { clearInterval(floorTimer); floorTimer = null }
+    stageReset()
   }
 }
 
@@ -178,4 +176,6 @@ export function stageReset(): void {
   consumed.clear()
   speakingText = ''
   ttsReset()
+  narratingLine = false
+  recomputeFloor()
 }

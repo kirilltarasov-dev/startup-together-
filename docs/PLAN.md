@@ -217,6 +217,24 @@ unconfirmed until teammates report a branch/build; this window has not coded.
 | T10 | Visual/browser QA, production build, hosting smoke | All | T07,T09,T12 | TODO | G4 passes against identified build, including requested voice/fallback |
 | T11 | Rehearse live/replay, record backup, and submit | All | T10 | TODO | G5 passes; real-repair evidence and submission recorded |
 
+## September 21 Audio Repair
+
+User authorized implementation and GPT-5.6 Terra audit. Browser/audio/preview
+hold remains active; verification is silent and mocked only.
+
+| Task | Owner | Files | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| Accent selection and cancellation | Codex | `src/voice/tts.ts`, `tts.test.ts` | DONE | Silent inventory/cancellation test passes; listening acceptance pending |
+| Live lifecycle and partial-transcript safety | Terra | `src/voice/liveClient.ts`, `liveClient.test.mjs` | DONE | Four mocked lifecycle tests pass; provider acceptance pending |
+| Explicit choice matching and router safety | Terra | `src/voice/choiceMatch.ts`, `api/voice/session.ts`, `choiceMatch.test.ts`, `session.test.ts` | DONE | Three silent tests pass |
+| Single input owner and stage cancellation | Codex | `src/voice/commandEar.ts`, `src/voice/stageManager.ts`, `stageManager.test.mjs` | DONE | Silent reset/cut tests pass; complete suite 34/34, build passes |
+
+Paths above are relative to `apps/game/`. No deployment or listening-quality
+verification is claimed.
+Codex also owns the `package.json` test command only, to include the silent regressions.
+`src/voice/VoiceButton.tsx`: Codex adds connecting cancellation and accurate mute labels.
+`src/App.tsx`: Codex connects HUD/SFX and speech mute states and removes the inert ear initialization.
+
 ## Risk and Decision Register
 
 | ID | Risk / open decision | Trigger | Response | Owner |

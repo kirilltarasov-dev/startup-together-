@@ -8,20 +8,31 @@ import { Play } from './scenes/Play'
 import { Result } from './scenes/Result'
 import { useGame } from './state/gameStore'
 import { useRun } from './state/runStore'
-import { VoiceButton, getLiveClient, initCommandEar, initTts, stageInit, ttsSetMuted, ttsVoiceReport } from './voice'
+import { VoiceButton, getLiveClient, initTts, stageInit, ttsSetMuted, ttsVoiceReport } from './voice'
 
 export default function App() {
   const screen = useGame((s) => s.screen)
   // The live session is a singleton and survives screen changes; show a Mute/Disconnect pill off the Play screen.
   const [voiceOn, setVoiceOn] = useState(false)
-  useEffect(() => getLiveClient().subscribe((s) => { setVoiceOn(s.status !== 'idle'); ttsSetMuted(s.muted) }), [])
-  // Scripted founder lines: one serialized speech queue (stageManager) -> live voice for Sergio/Investor, local TTS otherwise.
+  useEffect(() => {
+    const client = getLiveClient()
+    client.setMuted(useRun.getState().muted)
+    const offVoice = client.subscribe((s) => {
+      setVoiceOn(s.status !== 'idle')
+      ttsSetMuted(s.muted)
+      if (useRun.getState().muted !== s.muted) useRun.setState({ muted: s.muted })
+    })
+    const offRun = useRun.subscribe((s, previous) => {
+      if (s.muted !== previous.muted && client.getState().muted !== s.muted) client.setMuted(s.muted)
+    })
+    return () => { offRun(); offVoice(); client.disconnect() }
+  }, [])
+  // Scripted founder lines keep their per-character TTS identity in one serialized queue.
   useEffect(() => {
     const offTts = initTts() // voice-list warmup
     const offStage = stageInit()
-    const offEar = initCommandEar() // local always-on command ear; runs while the live session is connected
     ;(window as unknown as { runwayVoices?: () => Record<string, string> }).runwayVoices = ttsVoiceReport
-    return () => { offEar(); offStage(); offTts() }
+    return () => { offStage(); offTts() }
   }, [])
 
   // Voice (Lane V) → same validated path as buttons. The Play scene consumes runStore.voiceRequest.
