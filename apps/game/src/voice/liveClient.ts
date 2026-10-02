@@ -50,6 +50,8 @@ type ResponsesConfig = Record<string, unknown> & { instructions?: string; tool_c
 const SESSION_CAP_MS = 10 * 60 * 1000
 const IDLE_NULL_CTX_MS = 10 * 60 * 1000
 const ICE_GATHER_TIMEOUT_MS = 1000
+const CONNECT_TIMEOUT_MS = 20000
+const DISCONNECT_GRACE_MS = 5000
 /** UI indicator only: how long after the last transcript delta we keep showing "speaking". Not audio speed. */
 const SPEAKING_SETTLE_MS = 1200
 /** Max chars of scripted-line commentary per append (keep the tail). */
@@ -124,6 +126,8 @@ export function createLiveClient(): LiveClient {
   let capTimer: ReturnType<typeof setTimeout> | null = null
   let nullCtxTimer: ReturnType<typeof setTimeout> | null = null
   let speakTimer: ReturnType<typeof setTimeout> | null = null
+  let connectTimer: ReturnType<typeof setTimeout> | null = null
+  let disconnectTimer: ReturnType<typeof setTimeout> | null = null
   let lastCtxId: string | null = null
   /** Full delegation.responses from the server; null until the session response arrives. */
   let baseResponses: ResponsesConfig | null = null
@@ -339,6 +343,8 @@ export function createLiveClient(): LiveClient {
     switch (type) {
       case 'session.started': {
         started = true
+        if (connectTimer) { clearTimeout(connectTimer); connectTimer = null }
+        if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null }
         if (tConnectStart) console.info('[voice:metrics] cold connect ms', Math.round(performance.now() - tConnectStart))
         // Prefer the server-echoed config; fall back to what Azure reports in session.started.
         if (!baseResponses) {
@@ -411,6 +417,8 @@ export function createLiveClient(): LiveClient {
     if (capTimer) { clearTimeout(capTimer); capTimer = null }
     if (nullCtxTimer) { clearTimeout(nullCtxTimer); nullCtxTimer = null }
     if (speakTimer) { clearTimeout(speakTimer); speakTimer = null }
+    if (connectTimer) { clearTimeout(connectTimer); connectTimer = null }
+    if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null }
     if (unsubCtx) { unsubCtx(); unsubCtx = null }
     if (inflightTimer) { clearTimeout(inflightTimer); inflightTimer = null }
     chooseInFlight = false
@@ -451,6 +459,7 @@ export function createLiveClient(): LiveClient {
     if (active()) return
     set({ status: 'connecting', reason: undefined, caption: '', heard: '' })
     tConnectStart = performance.now()
+    connectTimer = setTimeout(() => { if (active() && !started) fail('connection timeout') }, CONNECT_TIMEOUT_MS)
     try {
       if (typeof window === 'undefined' || !('RTCPeerConnection' in window) || !navigator.mediaDevices?.getUserMedia) {
         fail('browser not supported'); return
@@ -474,8 +483,16 @@ export function createLiveClient(): LiveClient {
         if (audioEl) { audioEl.srcObject = ev.streams[0] ?? new MediaStream([ev.track]); audioEl.play().catch(() => {}) }
       }
       localPc.onconnectionstatechange = () => {
-        const s = localPc.connectionState
-        if ((s === 'failed' || s === 'disconnected' || s === 'closed') && pc === localPc && active()) fail('connection lost')
+        const connection = localPc.connectionState
+        console.info('[voice] peer connection state', connection, { ice: localPc.iceConnectionState })
+        if (connection === 'connected' && disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null }
+        if ((connection === 'failed' || connection === 'closed') && pc === localPc && active()) fail(`connection ${connection}`)
+        if (connection === 'disconnected' && pc === localPc && active() && !disconnectTimer) {
+          disconnectTimer = setTimeout(() => {
+            disconnectTimer = null
+            if (pc === localPc && localPc.connectionState === 'disconnected' && active()) fail('connection lost')
+          }, DISCONNECT_GRACE_MS)
+        }
       }
 
       dc = localPc.createDataChannel('oai-events')
@@ -494,9 +511,10 @@ export function createLiveClient(): LiveClient {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ sdp }),
+          signal: AbortSignal.timeout(CONNECT_TIMEOUT_MS),
         })
-      } catch {
-        fail('network error'); return
+      } catch (error) {
+        fail((error as { name?: string })?.name === 'TimeoutError' ? 'voice server timeout' : 'network error'); return
       }
       if (pc !== localPc) return // disconnected mid-flight
       if (!res.ok) {
