@@ -69,17 +69,19 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
     setReaction(lines)
   }
 
-  // voice → same path as a button
+  // voice → same path as a button ("continue" = the CONTINUE button)
   useEffect(() => {
     const vr = run.voiceRequest
     if (!event || !vr || vr.eventId !== event.id) return
+    if (vr.choiceId === 'continue') { if (reaction) next(); return }
     const c = event.choices.find((x) => x.id === vr.choiceId)
     if (c) choose(c, vr.constraint)
   }, [run.voiceRequest?.n]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!event) return null
 
-  const next = () => {
+  function next() {
+    if (!event) return
     const idx = g.eventIndex
     const nextEv: GameEvent | undefined = sequence[idx + 1]
     if (event.id === 'E02') { g.setScreen('result'); return }

@@ -25,12 +25,19 @@ function FurnitureAsset({ file, position, size, height, rotation = 0 }: { file: 
   return <group position={position} rotation={[0, rotation, 0]}><primitive object={model} dispose={null} /></group>
 }
 
-const DESK_SIZE: Position = [1.78, 0.845, 1.38]
+/** Work surface height shared by every table so the seated founder poses and laptops line up. */
+export const DESK_HEIGHT = 0.845
+const DESK_SIZE: Position = [1.78, DESK_HEIGHT, 1.38]
 
 export function RealisticChair({ x, z = -6.5 }: { x: number; z?: number }) {
   return <FurnitureAsset file="school-chair" position={[x, 0, z]} height={1.04} />
 }
 
+/** One Poly Haven wooden table fitted to a footprint (width, height, depth) inside the shared desk collider. */
+export function RealisticTable({ x, z = -5, size = DESK_SIZE, rotation = 0 }: { x: number; z?: number; size?: Position; rotation?: number }) {
+  return <FurnitureAsset file="wooden-table" position={[x, 0, z]} size={size} rotation={rotation} />
+}
+
 export function RealisticDesks() {
-  return <group>{[-1.8, 0, 1.8].map((x) => <FurnitureAsset key={x} file="wooden-table" position={[x, 0, -5]} size={DESK_SIZE} />)}</group>
+  return <group>{[-1.8, 0, 1.8].map((x) => <RealisticTable key={x} x={x} />)}</group>
 }

@@ -8,6 +8,7 @@ import type { FounderId, SceneId } from '../state/types'
 import type { Mood } from '../components/World'
 import type { PlayerActions } from '../characters/CharacterController'
 import { CHARACTERS, type CharacterId } from '../characters/CharacterCustomization'
+import { QualitySelect } from './qualityBridge'
 
 export function ImmersiveWorld({ scene, mood = 'idle', active, children, onSwitchView }: { scene: SceneId | 'devin'; mood?: Mood; active?: FounderId; children?: ReactNode; onSwitchView: () => void }) {
   const screen = useGame((state) => state.screen)
@@ -40,6 +41,7 @@ export function ImmersiveWorld({ scene, mood = 'idle', active, children, onSwitc
       <nav className="flex flex-wrap gap-2 pointer-events-auto" aria-label="Third-person controls">
         <BigButton className={button} onClick={onSwitchView}>FIRST-PERSON VIEW</BigButton>
         <label className="rounded border border-line bg-panel p-2 text-xs">Character <select aria-label="Character appearance" value={selected} onChange={(event) => setSelected(event.target.value as CharacterId)} className="bg-panel text-mint">{CHARACTERS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <QualitySelect />
         <BigButton className={button} onClick={() => controls.current?.reset()}>RESET POSITION</BigButton>
         <BigButton className={button} onClick={() => setStory((open) => !open)}>{story ? 'BACK TO WORLD' : 'TALK TO FOUNDERS · F'}</BigButton>
       </nav>

@@ -40,8 +40,25 @@ export function resolveChoice(event: GameEvent, choiceId: string): Choice | null
 // ---------- voice context (docs/VOICE.md) ----------
 
 
+/** True when the card is showing its reaction + CONTINUE button (voice may say "continue"). */
+export function continueAvailable(event: GameEvent | undefined, s: GameState): boolean {
+  if (!event || !s.resolved[event.id]) return false
+  if (event.id === 'E04' && s.resolved.E04 === 'send_devin') return s.missionOutcome !== 'none'
+  return true
+}
+
 export function buildVoiceContext(event: GameEvent | undefined, s: GameState): VoiceContext | null {
-  if (!event?.voice || s.resolved[event.id]) return null
+  if (!event) return null
+  if (continueAvailable(event, s)) {
+    return {
+      eventId: `${event.id}:continue`,
+      contextText: `CURRENT EVENT: ${event.id} is decided; the card shows CONTINUE.
+YOUR ROLE: Sergio (you). If the player says continue / next / go on (or clearly wants to move on), delegate choice "continue". Otherwise banter briefly.
+ALLOWED CHOICES: continue = "Continue" (advance to the next scene).`,
+      allowedChoices: [{ id: 'continue', label: 'Continue' }],
+    }
+  }
+  if (!event.voice) return null
   const allowed = event.choices.map((c) => ({ id: c.id, label: c.label }))
   let contextText = ''
   if (event.id === 'E01') {
@@ -86,9 +103,9 @@ export function connectVoiceBridge(onChoice: (event: GameEvent, choiceId: string
     if (s.screen !== lastScreen) {
       if (s.screen === 'play' && lastScreen === 'opening') speakLines(OPENING_LINES, 'opening')
       if (s.screen === 'result') {
-        // Result.tsx reveals the line at step 3 (~4.6s); delay so the voice roughly matches the card.
+        // Result.tsx reveals the line at step 3 (~4.6s). Stage audio adds a 400 ms visual lead.
         if (resultTimer) clearTimeout(resultTimer)
-        resultTimer = setTimeout(() => { if (useGame.getState().screen === 'result') speakLines([RESULT_LINE], 'result') }, 3000)
+        resultTimer = setTimeout(() => { if (useGame.getState().screen === 'result') speakLines([RESULT_LINE], 'result') }, 4300)
       }
       if (s.screen === 'devin') speakLines([WAITING_LINES[0]], 'waiting:0')
       if (s.screen === 'ending') {
@@ -112,8 +129,11 @@ export function connectVoiceBridge(onChoice: (event: GameEvent, choiceId: string
   sync(useGame.getState())
   const unsub = useGame.subscribe(sync)
   _setVoiceDispatcher((eventId, choiceId, constraint) => {
-    const ev = currentEvent(useGame.getState())
-    if (!ev || ev.id !== eventId) return false
+    const s = useGame.getState()
+    const ev = currentEvent(s)
+    if (!ev) return false
+    if (eventId === `${ev.id}:continue`) return choiceId === 'continue' && continueAvailable(ev, s) && onChoice(ev, 'continue')
+    if (ev.id !== eventId) return false
     return onChoice(ev, choiceId, constraint)
   })
   return () => { unsub(); if (resultTimer) clearTimeout(resultTimer) }

@@ -7,6 +7,7 @@ import type { FounderId, SceneId } from '../state/types'
 import type { Mood } from '../components/World'
 import { grassTarget, isGrass, movePlayer } from '../engine/firstPerson'
 import { InteractiveGrass, type GrassInteraction } from './InteractiveGrass'
+import { Birds } from './Birds'
 import { SceneEnvironment } from './SceneEnvironment'
 import { MATERIAL as M } from './sceneMaterials'
 import { CourtyardLighting } from './EnvironmentAssets'
@@ -212,6 +213,7 @@ export function FirstPersonWorld({ scene, mood, active, controlsRef, hintRef, on
     <ErrorBoundary label="Courtyard lighting" fallback={fallbackLighting}><Suspense fallback={fallbackLighting}><CourtyardLighting /></Suspense></ErrorBoundary>
     <SceneEnvironment scene={scene} mood={mood} active={active} reducedMotion={reducedMotion} />
     <InteractiveGrass interactionRef={interactionRef} reducedMotion={reducedMotion} />
+    <Birds visible={scene !== 'S2'} reducedMotion={reducedMotion} />
     <Player controlsRef={controlsRef} interactionRef={interactionRef} hintRef={hintRef} onExploreChange={onExploreChange} onControlError={onControlError} reducedMotion={reducedMotion} />
   </Canvas>
 }

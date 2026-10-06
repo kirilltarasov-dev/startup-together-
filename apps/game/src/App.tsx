@@ -14,8 +14,20 @@ export default function App() {
   const screen = useGame((s) => s.screen)
   // The live session is a singleton and survives screen changes; show a Mute/Disconnect pill off the Play screen.
   const [voiceOn, setVoiceOn] = useState(false)
-  useEffect(() => getLiveClient().subscribe((s) => { setVoiceOn(s.status !== 'idle'); ttsSetMuted(s.muted) }), [])
-  // Scripted founder lines: one serialized speech queue (stageManager) -> live voice for Sergio/Investor, local TTS otherwise.
+  useEffect(() => {
+    const client = getLiveClient()
+    client.setMuted(useRun.getState().muted)
+    const offVoice = client.subscribe((s) => {
+      setVoiceOn(s.status !== 'idle')
+      ttsSetMuted(s.muted)
+      if (useRun.getState().muted !== s.muted) useRun.setState({ muted: s.muted })
+    })
+    const offRun = useRun.subscribe((s, previous) => {
+      if (s.muted !== previous.muted && client.getState().muted !== s.muted) client.setMuted(s.muted)
+    })
+    return () => { offRun(); offVoice(); client.disconnect() }
+  }, [])
+  // Scripted founder lines keep their per-character TTS identity in one serialized queue.
   useEffect(() => {
     const offTts = initTts() // voice-list warmup
     const offStage = stageInit()
@@ -26,7 +38,7 @@ export default function App() {
   // Voice (Lane V) → same validated path as buttons. The Play scene consumes runStore.voiceRequest.
   useEffect(() => connectVoiceBridge((event, choiceId, constraint) => {
     const ev = currentEvent(useGame.getState())
-    if (!ev || ev.id !== event.id || !ev.choices.some((c) => c.id === choiceId)) return false
+    if (!ev || ev.id !== event.id || (choiceId !== 'continue' && !ev.choices.some((c) => c.id === choiceId))) return false
     useRun.getState().requestVoiceChoice(event.id, choiceId, constraint)
     return true
   }), [])

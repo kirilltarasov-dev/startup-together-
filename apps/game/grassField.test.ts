@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { isGrass } from './src/engine/firstPerson.ts'
-import { createGrassField } from './src/scenes/grassField.ts'
+import { GRASS_MAX_DISPLACEMENT, GRASS_WIND_AMPLITUDE, createGrassField, grassBounds } from './src/scenes/grassField.ts'
 
 test('grass distribution is repeatable and different layers have distinct placement', () => {
   assert.deepEqual(createGrassField('grass'), createGrassField('grass'))
@@ -29,4 +29,24 @@ test('grass has coherent height variation while keeping its instance budget belo
   assert.ok(Math.max(...heights) - Math.min(...heights) > 0.3)
   const total = field.count + createGrassField('seed').count + createGrassField('clover').count
   assert.ok(total < 64000)
+  assert.equal(total, 58400, 'instance budget is unchanged by the shared-wind work')
+})
+
+test('animated bounding sphere covers every blade tip plus the maximum wind/foot/brush displacement', () => {
+  assert.ok(GRASS_MAX_DISPLACEMENT > GRASS_WIND_AMPLITUDE + 0.38 + 0.48)
+  for (const kind of ['grass', 'seed', 'clover'] as const) {
+    const field = createGrassField(kind)
+    const { center, radius } = grassBounds(field)
+    assert.ok(radius < 12, `radius stays tight (${radius.toFixed(2)})`)
+    for (let i = 0; i < field.count; i++) {
+      const x = field.offsets[i * 3], y = field.offsets[i * 3 + 1], z = field.offsets[i * 3 + 2]
+      const tip = y + field.shapes[i * 4 + 1]
+      for (const [dx, dz] of [[GRASS_MAX_DISPLACEMENT, 0], [-GRASS_MAX_DISPLACEMENT, 0], [0, GRASS_MAX_DISPLACEMENT], [0, -GRASS_MAX_DISPLACEMENT]]) {
+        const distance = Math.hypot(x + dx - center[0], tip - center[1], z + dz - center[2])
+        assert.ok(distance <= radius, `${kind} blade ${i} tip displaced by (${dx},${dz}) leaves the bounding sphere`)
+      }
+      assert.ok(Math.hypot(x - center[0], y - center[1], z - center[2]) <= radius)
+    }
+  }
+  assert.deepEqual(grassBounds({ count: 0, offsets: new Float32Array(), shapes: new Float32Array() }).center, [0, 0, 0])
 })

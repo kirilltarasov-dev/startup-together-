@@ -5,7 +5,22 @@
   "sourceLOD": "LOD1",
   "sourceTriangles": 495533,
   "triangles": 64938,
-  "bytes": 7999608,
-  "sha256": "1ffd2d874bdf2f511a64ef8941d8840c802d1f0835a49c9846ab78f5ea046724",
-  "maxTextureDimension": 512
+  "bytes": 2722428,
+  "sha256": "5608df9c31316bc15468fab4299d49f6ce5f11478dffed781ced86624c913793",
+  "maxTextureDimension": 512,
+  "blenderExportBytes": 7999608,
+  "blenderExportSha256": "1ffd2d874bdf2f511a64ef8941d8840c802d1f0835a49c9846ab78f5ea046724",
+  "compression": {
+    "extensions": [
+      "KHR_mesh_quantization",
+      "EXT_meshopt_compression"
+    ],
+    "positions": "uint16 grid, node scale 6.984e-5 m/step",
+    "normals": "int8 normalized",
+    "uvs": "uint16 normalized",
+    "droppedAttributes": "TEXCOORD_1 on leaves/trunk (only the branch material samples UV set 1)",
+    "encoder": "meshoptimizer 1.1.1 (installed dependency), vertex codec v0 / index codec v1 for the three-stdlib decoder, scripts/shrink-environment-assets.mjs",
+    "decoder": "three-stdlib MeshoptDecoder via drei useGLTF (default)",
+    "date": "September 19, 2026"
+  }
 }

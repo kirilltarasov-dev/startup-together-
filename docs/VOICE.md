@@ -21,6 +21,12 @@ The `session` object is **strict**: unknown fields are rejected. Allowed at crea
 `model`, `instructions`, `audio.output.voice` (default `marin`), `delegation`. There is no
 VAD/turn-detection field. `model`, `instructions`, and `audio` are **immutable after start**.
 
+## Reliability and ordering
+
+- Scripted text is visible before audio: each stage payload has a 400 ms lead; EventCard reveals its first line after 300 ms. Special result timing accounts for its delayed reveal.
+- The Azure delegated `choose` call is primary. If it omits the tool call, an exact affirmative command reconstructed from Azure's own input transcript can dispatch through the same validated bridge after 900 ms. The existing conservative matcher rejects questions, negation, ambiguity, muted/held input and duplicates. This is not a second browser speech recognizer.
+- Session setup has a 20-second bound. A transient WebRTC `disconnected` state gets five seconds to recover; `failed` and `closed` remain terminal. Connection logs include peer and ICE state.
+
 ## Architecture
 
 - Browser opens WebRTC: mic track + data channel `oai-events`, creates the SDP offer, posts it
@@ -41,7 +47,7 @@ VAD/turn-detection field. `model`, `instructions`, and `audio` are **immutable a
 - Tool call arrives as a `response.event` envelope; dispatch on `event.event.type ===
   "response.output_item.done"` where the item has `type: "function_call"`, `call_id`, `name`,
   `arguments`. Reply with `response.item.create` `{ type: "function_call_output", call_id,
-  output }` then `response.create` so the voice can react.
+  output }`. Do not send `response.create`: the scripted reaction line plays instead and the live voice stays quiet until the player speaks again.
 - The client validates `eventId`/`choiceId` against the active event and dispatches the same
   store action as a button click (`dispatchVoiceChoice` in `voiceBridge.ts`). Anything else
   the model says is shown as a caption (from `session.output_transcript.delta`) and does nothing.
