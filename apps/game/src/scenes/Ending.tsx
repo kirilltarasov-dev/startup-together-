@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion'
+import { useEffect } from 'react'
 import { BigButton } from '../components/ui'
 import { World } from '../components/World'
 import { ending } from '../engine/engine'
@@ -6,6 +7,7 @@ import { ENDING_LINES } from '../events/skit'
 import { FOUNDERS, useGame } from '../state/gameStore'
 import { useRun } from '../state/runStore'
 import { getLiveClient, stageReset } from '../voice'
+import { speakLines } from '../state/voiceBridge'
 
 const MODE_LABEL = { live: 'LIVE', cached: 'CACHED REAL RUN', mock: 'MOCK' }
 
@@ -20,6 +22,7 @@ export function Ending() {
   const win = !['BACK TO THE HACKATHON', 'OUT OF RUNWAY', 'THE COMPANY OUTLASTED THE TEAM', 'TECHNICAL DEBT CAME DUE', 'THE DEAL FELL THROUGH'].includes(verdict)
   const line = g.mode === 'campaign' ? { ...ENDING_LINES[win ? 'win' : 'lose'], text: win ? 'It is not just a pitch anymore. Tomorrow we keep the promises that remain.' : 'That is the company our decisions built. Next time, we change the decisions.' } : win ? ENDING_LINES.win : ENDING_LINES.lose
   const ev = g.missionEvidence
+  useEffect(() => { speakLines([line], `ending:${win ? 'win' : 'lose'}:visible`) }, [win]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const restart = () => { getLiveClient().disconnect(); stageReset(); run.clearMission(); g.restart() }
 

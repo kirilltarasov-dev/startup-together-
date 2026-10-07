@@ -51,7 +51,7 @@ PR #16 was based before PR #15 and conflicted in `liveClient.ts`. Latest `main` 
 Two department-demo reports were addressed in the integrated code:
 
 - **Voice did not take the action:** Azure remains authoritative, but an exact affirmative command from Azure's own input transcript now uses the conservative `matchChoice` helper after a 900 ms settle if the delegated router omits its tool call. Questions, negation, ambiguity, muted/held input and stale/resolved events remain rejected. This is not a second microphone recognizer.
-- **Speech started before text appeared:** the stage queue gives each new payload a 400 ms visual lead (the card reveals its first line after 300 ms). The result-line schedule was aligned to its later card reveal. Reset/cut generation checks remain active during the lead.
+- **Speech started before text appeared:** fixed-delay scheduling was replaced with render-driven scheduling. EventCard emits each line to the stage queue only from a post-render effect after that exact text is committed; reactions use the same path. Result, ending and mission-wait text emit from their rendered scene components. Hidden opening dialogue and the engine's eager bulk-dialogue emission were removed. The stage retains a 400 ms safety lead after the render signal.
 
 Live corporate-network/WebRTC and acoustic checks remain required; mocked tests cannot prove BMW firewall behavior or Azure availability.
 

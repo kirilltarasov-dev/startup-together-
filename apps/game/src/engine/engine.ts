@@ -1,10 +1,10 @@
 /** Pure game rules from docs/SKIT.md. No rendering, no input. */
-import { DISABLE_FEED_SECOND, ENDING_LINES, EVENTS, MISSION_LINES, OPENING_LINES, RESULT_LINE, WAITING_LINES } from '../events/skit.ts'
+import { EVENTS } from '../events/skit.ts'
 import { CAMPAIGN_EVENTS, campaignEventAt, campaignEnding } from '../events/campaign.ts'
 import { applyEffects } from './effects.ts'
 import { useGame } from '../state/gameStore.ts'
-import { _setVoiceContext, _setVoiceDispatcher, formatLines, speakLines, type VoiceContext } from '../state/voiceBridge.ts'
-import type { Choice, GameEvent, GameState, Line } from '../state/types'
+import { _setVoiceContext, _setVoiceDispatcher, formatLines, type VoiceContext } from '../state/voiceBridge.ts'
+import type { Choice, GameEvent, GameState } from '../state/types'
 
 export const eventSequence = (s: Pick<GameState, 'mode'>): GameEvent[] => s.mode === 'campaign' ? CAMPAIGN_EVENTS : EVENTS
 export const currentEvent = (s: Pick<GameState, 'mode' | 'eventIndex' | 'flags' | 'missionOutcome'>): GameEvent | undefined => s.mode === 'campaign' ? campaignEventAt(s.eventIndex, s) : EVENTS[s.eventIndex]
@@ -29,11 +29,6 @@ export function resolveChoice(event: GameEvent, choiceId: string): Choice | null
   const choice = active.choices.find((c) => c.id === choiceId)
   if (!choice) return null
   g.set({ ...applyEffects(g, choice.effects ?? {}), resolved: { ...g.resolved, [event.id]: choice.id } })
-  if (choice.reaction) {
-    const lines: Line[] = [choice.reaction]
-    if (choice.id === 'disable_feed') lines.push(DISABLE_FEED_SECOND)
-    speakLines(lines, `${event.id}:reaction:${choice.id}`)
-  }
   return choice
 }
 
@@ -92,39 +87,11 @@ ALLOWED CHOICES: ${choices}.`
 
 /** Keep the voice bridge in sync with the store. Call once at app start. Returns unsubscribe. */
 export function connectVoiceBridge(onChoice: (event: GameEvent, choiceId: string, constraint?: string) => boolean) {
-  let lastScreen: GameState['screen'] | null = null
-  let lastSpokenEvent: string | null = null
-  let lastOutcome: GameState['missionOutcome'] = 'none'
-  let resultTimer: ReturnType<typeof setTimeout> | null = null
   const sync = (s: GameState) => {
     const ev = currentEvent(s)
+    // Context can update from state immediately; audible lines are emitted only by the component
+    // that has already rendered them (EventCard, Result, Ending, DevinMode).
     _setVoiceContext(s.screen === 'play' ? buildVoiceContext(ev, s) : null)
-    // Scripted lines -> voice (dedupe by tag happens in the live client).
-    if (s.screen !== lastScreen) {
-      if (s.screen === 'play' && lastScreen === 'opening') speakLines(OPENING_LINES, 'opening')
-      if (s.screen === 'result') {
-        // Result.tsx reveals the line at step 3 (~4.6s). Stage audio adds a 400 ms visual lead.
-        if (resultTimer) clearTimeout(resultTimer)
-        resultTimer = setTimeout(() => { if (useGame.getState().screen === 'result') speakLines([RESULT_LINE], 'result') }, 4300)
-      }
-      if (s.screen === 'devin') speakLines([WAITING_LINES[0]], 'waiting:0')
-      if (s.screen === 'ending') {
-        const win = ending(s) === 'STILL IN BUSINESS'
-        speakLines([win ? ENDING_LINES.win : ENDING_LINES.lose], `ending:${win ? 'win' : 'lose'}`)
-      }
-      lastScreen = s.screen
-    }
-    if (s.missionOutcome !== lastOutcome) {
-      lastOutcome = s.missionOutcome
-      if (s.missionOutcome === 'success' || s.missionOutcome === 'failure') {
-        speakLines(MISSION_LINES[s.missionOutcome], `mission:${s.missionOutcome}`, `VERIFIED GAME RESULT: Devin mission ${s.missionOutcome}.`)
-      }
-    }
-    if (s.screen === 'play' && ev) {
-      if (ev.id !== lastSpokenEvent) { lastSpokenEvent = ev.id; speakLines(ev.dialogue, `${ev.id}:dialogue`) }
-    } else if (s.screen === 'opening') {
-      lastSpokenEvent = null // restart: E01 speaks again (client dedupe set is cleared on disconnect)
-    }
   }
   sync(useGame.getState())
   const unsub = useGame.subscribe(sync)
@@ -136,5 +103,5 @@ export function connectVoiceBridge(onChoice: (event: GameEvent, choiceId: string
     if (ev.id !== eventId) return false
     return onChoice(ev, choiceId, constraint)
   })
-  return () => { unsub(); if (resultTimer) clearTimeout(resultTimer) }
+  return unsub
 }

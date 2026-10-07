@@ -5,6 +5,7 @@ import { World } from '../components/World'
 import { RESULT_LINE } from '../events/skit'
 import { FOUNDERS, useGame } from '../state/gameStore'
 import { sfx } from '../state/sfx'
+import { speakLines } from '../state/voiceBridge'
 
 /** Hackathon result interstitial (docs/SKIT.md). One click. */
 export function Result() {
@@ -17,6 +18,7 @@ export function Result() {
     const t = setTimeout(() => setStep(step + 1), step === 0 ? 1400 : 1600)
     return () => clearTimeout(t)
   }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (step === 3) speakLines([RESULT_LINE], 'result:visible') }, [step])
 
   const go = () => { g.goScene('S2'); g.nextEvent(); g.setScreen('play') }
 

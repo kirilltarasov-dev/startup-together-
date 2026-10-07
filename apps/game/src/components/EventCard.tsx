@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FOUNDERS } from '../state/gameStore'
+import { speakLines } from '../state/voiceBridge'
 import type { Choice, FounderId, GameEvent, Line } from '../state/types'
 import { ChoiceButton } from './ui'
 
@@ -26,10 +27,12 @@ function Speech({ line }: { line: Line }) {
 
 export function EventCard({ event, reaction, onChoose, onContinue, onSpeaker, urgent, voiceSlot }: Props) {
   const [shown, setShown] = useState(0)
+  const spokenVisible = useRef(0)
 
   // reveal dialogue line by line, highlight the speaker
   useEffect(() => {
     setShown(0)
+    spokenVisible.current = 0
     let i = 0
     const tick = () => {
       i++
@@ -41,7 +44,20 @@ export function EventCard({ event, reaction, onChoose, onContinue, onSpeaker, ur
     return () => clearTimeout(t)
   }, [event.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { if (reaction) onSpeaker(reaction[0]?.who) }, [reaction]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Effects run after React commits the revealed text. Audio is queued only after it exists in the DOM.
+  useEffect(() => {
+    if (shown <= spokenVisible.current) return
+    const first = spokenVisible.current
+    const visible = event.dialogue.slice(first, shown)
+    spokenVisible.current = shown
+    if (visible.length) speakLines(visible, `${event.id}:visible:${first}-${shown}`)
+  }, [event.id, shown]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!reaction?.length) return
+    onSpeaker(reaction[0]?.who)
+    speakLines(reaction, `${event.id}:reaction:${reaction.map((line) => line.text).join('|')}`)
+  }, [event.id, reaction]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ready = shown >= event.dialogue.length
 

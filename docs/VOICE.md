@@ -23,7 +23,7 @@ VAD/turn-detection field. `model`, `instructions`, and `audio` are **immutable a
 
 ## Reliability and ordering
 
-- Scripted text is visible before audio: each stage payload has a 400 ms lead; EventCard reveals its first line after 300 ms. Special result timing accounts for its delayed reveal.
+- Scripted audio is render-driven: EventCard, Result, Ending and DevinMode enqueue a line only from a post-render effect after its exact text exists in the rendered scene. The stage then retains a 400 ms safety lead. The engine only updates voice context and never eagerly speaks hidden/bulk dialogue.
 - The Azure delegated `choose` call is primary. If it omits the tool call, an exact affirmative command reconstructed from Azure's own input transcript can dispatch through the same validated bridge after 900 ms. The existing conservative matcher rejects questions, negation, ambiguity, muted/held input and duplicates. This is not a second browser speech recognizer.
 - Session setup has a 20-second bound. A transient WebRTC `disconnected` state gets five seconds to recover; `failed` and `closed` remain terminal. Connection logs include peer and ICE state.
 
