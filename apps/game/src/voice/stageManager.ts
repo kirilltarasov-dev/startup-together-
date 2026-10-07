@@ -40,6 +40,7 @@ let generation = 0
 
 // ---- floor ----
 let floor: Floor = 'listening'
+let storyVisible = true
 const floorListeners = new Set<(f: Floor) => void>()
 /** True from the start of playLine until the line's audio is done (drives 'narrating'). */
 let narratingLine = false
@@ -54,9 +55,17 @@ export function subscribeFloor(cb: (f: Floor) => void): () => void {
 }
 export function getCurrentlySpeakingText(): string { return speakingText }
 
+export function setStoryVisible(visible: boolean): void {
+  if (storyVisible === visible) return
+  storyVisible = visible
+  getLiveClient().setConversationVisible(visible)
+  if (!visible) stageReset()
+  else recomputeFloor()
+}
+
 const setFloor = (f: Floor) => {
   // Mic policy is applied on every tick (setMicHold is idempotent) so a reconnect picks it up.
-  getLiveClient().setMicHold(f === 'narrating' || f === 'processing')
+  getLiveClient().setMicHold(!storyVisible || f === 'narrating' || f === 'processing')
   if (f === floor) return
   floor = f
   floorListeners.forEach((l) => { try { l(f) } catch (e) { console.warn('[voice] floor listener threw', e) } })
@@ -100,7 +109,7 @@ async function run(): Promise<void> {
   running = true
   const gen = generation
   try {
-    while (queue.length && gen === generation) {
+    while (queue.length && gen === generation && storyVisible) {
       current = queue.shift()!
       await sleep(VISUAL_LEAD_MS)
       if (gen !== generation) break
@@ -130,7 +139,7 @@ async function run(): Promise<void> {
 }
 
 function onPayload(p: SpeakPayload): void {
-  if (consumed.has(p.tag)) return
+  if (!storyVisible || consumed.has(p.tag)) return
   consumed.add(p.tag)
   const client = getLiveClient()
   client.noteScene(p) // quiet SCENE SO FAR context BEFORE the lines play
@@ -168,6 +177,8 @@ export function stageInit(): () => void {
   return () => {
     unsubSpeak?.(); unsubSpeak = null
     if (floorTimer) { clearInterval(floorTimer); floorTimer = null }
+    storyVisible = true
+    getLiveClient().setConversationVisible(true)
     stageReset()
   }
 }

@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
-import { FOUNDERS } from '../state/gameStore'
+import { FOUNDERS, useGame } from '../state/gameStore'
 import { speakLines } from '../state/voiceBridge'
+import { setStoryVisible } from '../voice/stageManager'
 import type { Choice, FounderId, GameEvent, Line } from '../state/types'
 import { ChoiceButton } from './ui'
 
@@ -27,6 +28,8 @@ function Speech({ line }: { line: Line }) {
 
 export function EventCard({ event, reaction, onChoose, onContinue, onSpeaker, urgent, voiceSlot }: Props) {
   const [shown, setShown] = useState(0)
+  const chosenId = useGame((state) => state.resolved[event.id])
+  const chosenLabel = [...event.choices, ...(event.variant?.choices ?? [])].find((choice) => choice.id === chosenId)?.label
   const spokenVisible = useRef(0)
 
   // reveal dialogue line by line, highlight the speaker
@@ -50,12 +53,13 @@ export function EventCard({ event, reaction, onChoose, onContinue, onSpeaker, ur
     const first = spokenVisible.current
     const visible = event.dialogue.slice(first, shown)
     spokenVisible.current = shown
-    if (visible.length) speakLines(visible, `${event.id}:visible:${first}-${shown}`)
+    if (visible.length) { setStoryVisible(true); speakLines(visible, `${event.id}:visible:${first}-${shown}`) }
   }, [event.id, shown]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!reaction?.length) return
     onSpeaker(reaction[0]?.who)
+    setStoryVisible(true)
     speakLines(reaction, `${event.id}:reaction:${reaction.map((line) => line.text).join('|')}`)
   }, [event.id, reaction]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -89,6 +93,7 @@ export function EventCard({ event, reaction, onChoose, onContinue, onSpeaker, ur
       <AnimatePresence mode="wait">
         {reaction ? (
           <motion.div key="reaction" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-5 border-t border-line pt-4">
+            {chosenLabel && <p role="status" className="mb-3 text-sm font-bold text-mint">Decision applied: {chosenLabel}</p>}
             <div className="space-y-2">{reaction.map((l, i) => <Speech key={i} line={l} />)}</div>
             <div className="mt-4 flex justify-end">
               <motion.button whileHover={{ x: 4 }} onClick={onContinue} className="font-bold tracking-widest text-sm px-5 py-2 rounded-full bg-white text-ink">

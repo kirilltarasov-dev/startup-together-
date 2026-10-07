@@ -41,6 +41,7 @@ export interface LiveClient {
   isChooseInFlight(): boolean
   /** Close/open the mic to Azure (floor policy, independent of the user's Mute). */
   setMicHold(hold: boolean): void
+  setConversationVisible(visible: boolean): void
   /** Event dedupe shared by all choice paths. */
   isResolved(eventId: string): boolean
   markResolved(eventId: string): void
@@ -367,7 +368,7 @@ export function createLiveClient(): LiveClient {
     const transcript = commandTranscript.trim()
     commandTranscript = ''
     const ctx = getVoiceContext()
-    if (!transcript || !ctx || state.muted || micHeld || resolvedEvents.has(ctx.eventId)) return
+    if (!transcript || !ctx || state.muted || micHeld || !conversationVisible || resolvedEvents.has(ctx.eventId)) return
     const choiceId = matchChoice(transcript, ctx.allowedChoices)
     if (!choiceId) return
     const ok = dispatchVoiceChoice(ctx.eventId, choiceId)
@@ -378,7 +379,7 @@ export function createLiveClient(): LiveClient {
   }
 
   const noteCommandTranscript = (delta: string) => {
-    if (state.muted || micHeld) { commandTranscript = ''; return }
+    if (state.muted || micHeld || !conversationVisible) { commandTranscript = ''; return }
     commandTranscript = (commandTranscript + delta).slice(-300)
     if (transcriptTimer) clearTimeout(transcriptTimer)
     transcriptTimer = setTimeout(tryTranscriptChoice, TRANSCRIPT_SETTLE_MS)
@@ -415,9 +416,9 @@ export function createLiveClient(): LiveClient {
       const inputWasAllowed = delegationId
         ? delegationInputAllowed.get(delegationId) ?? lastDelegationInputAllowed
         : lastDelegationInputAllowed
-      if (state.muted) {
-        output = 'rejected: microphone muted'
-        console.info('[voice] choose ignored while muted', eventId)
+      if (state.muted || !conversationVisible) {
+        output = state.muted ? 'rejected: microphone muted' : 'rejected: story not visible'
+        console.info('[voice] choose ignored while muted or story closed', eventId)
       } else if (!inputWasAllowed) {
         output = 'rejected: microphone was held when this delegation started'
         console.info('[voice] choose ignored from held input', eventId)
@@ -619,14 +620,14 @@ export function createLiveClient(): LiveClient {
       const localPc = new RTCPeerConnection()
       pc = localPc
       localStream.getTracks().forEach((t) => {
-        t.enabled = !state.muted && !micHeld
+        t.enabled = !state.muted && !micHeld && conversationVisible
         localPc.addTrack(t, localStream)
       })
 
       const localAudioEl = document.createElement('audio')
       audioEl = localAudioEl
       localAudioEl.autoplay = true
-      localAudioEl.muted = state.muted
+      localAudioEl.muted = state.muted || !conversationVisible
       localAudioEl.setAttribute('playsinline', '')
       localAudioEl.style.display = 'none'
       document.body.appendChild(localAudioEl)
@@ -716,15 +717,23 @@ export function createLiveClient(): LiveClient {
   }
 
   let micHeld = false
+  let conversationVisible = true
   const applyMic = () => {
-    const on = !state.muted && !micHeld
+    const on = !state.muted && !micHeld && conversationVisible
     try { stream?.getAudioTracks().forEach((t) => { t.enabled = on }) } catch { /* ignore */ }
     if (started) send({ type: on ? 'session.input_audio.unmute' : 'session.input_audio.mute' })
   }
 
+  function setConversationVisible(visible: boolean) {
+    if (conversationVisible === visible) return
+    conversationVisible = visible
+    if (audioEl) audioEl.muted = state.muted || !visible
+    applyMic()
+  }
+
   function setMuted(muted: boolean) {
     set({ muted })
-    if (audioEl) audioEl.muted = muted
+    if (audioEl) audioEl.muted = muted || !conversationVisible
     if (muted) for (const finish of [...sayWaiters]) finish(false)
     applyMic()
   }
@@ -752,6 +761,7 @@ export function createLiveClient(): LiveClient {
     isLiveSpeaking,
     isChooseInFlight: () => chooseInFlight,
     setMicHold,
+    setConversationVisible,
     isResolved: (eventId) => resolvedEvents.has(eventId),
     markResolved: (eventId) => { resolvedEvents.add(eventId) },
     noteExternalChoice,

@@ -12,6 +12,7 @@ import { FOUNDERS, useGame } from '../state/gameStore'
 import { useRun } from '../state/runStore'
 import { sfx } from '../state/sfx'
 import { speakLines } from '../state/voiceBridge'
+import { setStoryVisible } from '../voice/stageManager'
 
 const MISSION_PROMPT = `Work ONLY inside startup-repo/ of kirilltarasov-dev/startup-together- (FastAPI + SQLite).
 Production incident: GET /feed is extremely slow under load. Fix the bottleneck in backend/feed.py while preserving
@@ -66,7 +67,7 @@ export function DevinMode() {
   useEffect(() => { launch(); return () => { if (pollRef.current) window.clearTimeout(pollRef.current) } }, []) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (terminal) return; const iv = setInterval(() => setElapsed((e) => e + 1), 1000); return () => clearInterval(iv) }, [terminal])
   useEffect(() => { if (terminal) return; const iv = setInterval(() => setLineIdx((i) => (i + 1) % WAITING_LINES.length), 20000); return () => clearInterval(iv) }, [terminal])
-  useEffect(() => { if (!terminal) speakLines([WAITING_LINES[lineIdx]], `waiting:${lineIdx}:visible`) }, [lineIdx, terminal])
+  useEffect(() => { if (!terminal) { setStoryVisible(true); speakLines([WAITING_LINES[lineIdx]], `waiting:${lineIdx}:visible`) } }, [lineIdx, terminal])
   useEffect(() => { if (result) sfx(result.success ? 'win' : 'lose', 0.8) }, [result?.success]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { logRef.current?.scrollTo({ top: 1e9, behavior: 'smooth' }) }, [status?.log.length])
 

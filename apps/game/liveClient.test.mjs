@@ -240,6 +240,29 @@ test('respects mic hold at connect and session start, rejects held or muted tool
   _setVoiceDispatcher(() => false)
 })
 
+test('invisible story mutes live audio and blocks hidden Azure choices', async () => {
+  FakePeerConnection.all.length = 0
+  const track = new FakeTrack()
+  const audio = installSilentBrowser(async () => new FakeStream(track))
+  let dispatches = 0
+  _setVoiceContext({ eventId: 'E01', contextText: 'CURRENT EVENT', allowedChoices: [{ id: 'focused', label: 'Founders only' }] })
+  _setVoiceDispatcher(() => { dispatches++; return true })
+  const client = createLiveClient()
+  client.setConversationVisible(false)
+  const peer = await connectStarted(client)
+  assert.equal(track.enabled, false)
+  assert.equal(audio.at(-1).muted, true)
+  peer.dataChannel.receive({ type: 'session.delegation.created', delegation_id: 'hidden' })
+  peer.dataChannel.receive({ type: 'response.event', delegation_id: 'hidden', event: { type: 'response.output_item.done', item: { type: 'function_call', name: 'choose', call_id: 'hidden-call', arguments: '{"eventId":"E01","choiceId":"focused"}' } } })
+  assert.equal(dispatches, 0)
+  client.setConversationVisible(true)
+  assert.equal(track.enabled, true)
+  assert.equal(audio.at(-1).muted, false)
+  client.disconnect()
+  _setVoiceContext(null)
+  _setVoiceDispatcher(() => false)
+})
+
 test('Azure transcript fallback rejects questions and held scripted audio', async () => {
   FakePeerConnection.all.length = 0
   installSilentBrowser(async () => new FakeStream())
@@ -259,6 +282,25 @@ test('Azure transcript fallback rejects questions and held scripted audio', asyn
   peer.dataChannel.receive({ type: 'session.input_transcript.delta', delta: 'Send Devin' })
   await new Promise((resolve) => setTimeout(resolve, 950))
   assert.equal(dispatches, 0)
+  client.disconnect()
+  _setVoiceContext(null)
+  _setVoiceDispatcher(() => false)
+})
+
+test('accepts “proceed with founders only” once through the same validated voice bridge', async () => {
+  FakePeerConnection.all.length = 0
+  installSilentBrowser(async () => new FakeStream())
+  const applied = []
+  _setVoiceContext({ eventId: 'E01', contextText: 'CURRENT EVENT', allowedChoices: [{ id: 'focused', label: 'Founders only' }, { id: 'broad', label: 'Everyone with a pitch' }] })
+  _setVoiceDispatcher((eventId, choiceId) => { applied.push([eventId, choiceId]); return true })
+  const client = createLiveClient()
+  const peer = await connectStarted(client)
+  peer.dataChannel.receive({ type: 'session.input_transcript.delta', delta: 'Proceed with founders only.' })
+  await new Promise((resolve) => setTimeout(resolve, 950))
+  assert.deepEqual(applied, [['E01', 'focused']])
+  peer.dataChannel.receive({ type: 'session.input_transcript.delta', delta: 'Proceed with founders only.' })
+  await new Promise((resolve) => setTimeout(resolve, 950))
+  assert.deepEqual(applied, [['E01', 'focused']])
   client.disconnect()
   _setVoiceContext(null)
   _setVoiceDispatcher(() => false)

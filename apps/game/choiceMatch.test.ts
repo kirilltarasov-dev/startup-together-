@@ -9,6 +9,8 @@ const E04_CHOICES = [
 
 test('matches direct whole-utterance commands', () => {
   assert.equal(matchChoice('We should focus on founders.', [{ id: 'focused', label: 'Founders only' }, { id: 'broad', label: 'Everyone with a pitch' }]), 'focused')
+  assert.equal(matchChoice('Proceed with founders only.', [{ id: 'focused', label: 'Founders only' }, { id: 'broad', label: 'Everyone with a pitch' }]), 'focused')
+  assert.equal(matchChoice("Let's go with founders only.", [{ id: 'focused', label: 'Founders only' }, { id: 'broad', label: 'Everyone with a pitch' }]), 'focused')
   assert.equal(matchChoice('Please ship tonight.', [{ id: 'careful', label: 'Test the launch' }, { id: 'rush', label: 'Ship tonight' }]), 'rush')
   assert.equal(matchChoice('Tell Devin to fix the feed.', E04_CHOICES), 'send_devin')
   assert.equal(matchChoice('Turn off the feed now.', E04_CHOICES), 'disable_feed')

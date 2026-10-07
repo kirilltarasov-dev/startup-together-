@@ -9,6 +9,7 @@ import type { Mood } from '../components/World'
 import type { PlayerActions } from '../characters/CharacterController'
 import { CHARACTERS, type CharacterId } from '../characters/CharacterCustomization'
 import { QualitySelect } from './qualityBridge'
+import { setStoryVisible } from '../voice'
 
 export function ImmersiveWorld({ scene, mood = 'idle', active, children, onSwitchView }: { scene: SceneId | 'devin'; mood?: Mood; active?: FounderId; children?: ReactNode; onSwitchView: () => void }) {
   const screen = useGame((state) => state.screen)
@@ -20,6 +21,10 @@ export function ImmersiveWorld({ scene, mood = 'idle', active, children, onSwitc
   const reduced = !!useReducedMotion()
   const paused = forced || story || inactive
   const button = '!px-4 !py-2 !text-xs !tracking-normal !bg-panel !text-mint border border-line'
+  useEffect(() => {
+    if (!forced && !story) setStoryVisible(false)
+    return () => { if (!forced && !story) setStoryVisible(false) }
+  }, [forced, story])
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLElement && event.target.closest('input,textarea,select,[contenteditable="true"]')) return
@@ -51,6 +56,6 @@ export function ImmersiveWorld({ scene, mood = 'idle', active, children, onSwitc
       <nav className="world-touch" aria-label="Third-person touch controls">{([['KeyW', 'Forward'], ['KeyA', 'Left'], ['KeyS', 'Back'], ['KeyD', 'Right'], ['Space', 'Jump']] as const).map(([key, label]) => <BigButton key={key} className={button} onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); controls.current?.press(key, true) }} onPointerUp={() => controls.current?.press(key, false)} onPointerCancel={() => controls.current?.press(key, false)} onLostPointerCapture={() => controls.current?.press(key, false)}>{label}</BigButton>)}</nav>
     </aside>}
     {inactive && !forced && <button className="absolute inset-0 z-30 bg-ink/60 text-white" onClick={() => setInactive(false)}>PAUSED · CLICK TO CONTINUE</button>}
-    <section hidden={!forced && !story} inert={!forced && !story} aria-label="Story interaction" className="absolute inset-0 z-10 flex flex-col items-center justify-end gap-4 px-3 pb-4 pt-20 pointer-events-none [&>*]:pointer-events-auto [&>*]:max-h-full [&>*]:overflow-y-auto">{children}</section>
+    {(forced || story) && <section aria-label="Story interaction" className="absolute inset-0 z-10 flex flex-col items-center justify-end gap-4 px-3 pb-4 pt-20 pointer-events-none [&>*]:pointer-events-auto [&>*]:max-h-full [&>*]:overflow-y-auto">{children}</section>}
   </section>
 }

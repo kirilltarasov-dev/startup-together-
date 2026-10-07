@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { getVoiceContext, subscribeVoiceContext } from '../state/voiceBridge'
 import type { VoiceState } from './liveClient'
 import { getLiveClient } from './voiceSession'
+import { getFloor, subscribeFloor } from './stageManager'
 
 function MicIcon({ className = '' }: { className?: string }) {
   return (
@@ -43,7 +44,9 @@ export default function VoiceButton() {
   const client = getLiveClient()
   const [s, setS] = useState<VoiceState>(() => client.getState())
   const [hasCtx, setHasCtx] = useState(() => getVoiceContext() !== null)
+  const [floor, setFloor] = useState(getFloor)
 
+  useEffect(() => subscribeFloor(setFloor), [])
   useEffect(() => client.subscribe(setS), [client])
   useEffect(() => subscribeVoiceContext((ctx) => setHasCtx(ctx !== null)), [])
 
@@ -144,9 +147,9 @@ export default function VoiceButton() {
       {connected && s.caption && (
         <div className="text-xs leading-snug opacity-80 line-clamp-3 w-full">{s.caption}</div>
       )}
-      {connected && !s.caption && !s.heard && (
-        <div className="text-[10px] tracking-widest uppercase opacity-40">{s.muted ? 'muted' : 'listening…'}</div>
-      )}
+      {connected && <div className="text-[10px] tracking-widest uppercase opacity-70" role="status">
+        {s.muted ? 'Muted — unmute to choose' : floor === 'narrating' ? 'Founder speaking — wait, then say an option' : floor === 'processing' ? 'Processing your choice…' : floor === 'live_reply' || s.status === 'speaking' ? 'Listening resumes after reply' : hasCtx ? `Listening — say ${getVoiceContext()?.allowedChoices.map((c) => `“${c.label}”`).join(' or ') ?? 'an option'}` : 'Listening for the next event'}
+      </div>}
     </div>
   )
 }

@@ -1,9 +1,10 @@
 import { motion, useReducedMotion } from 'framer-motion'
-import { lazy, Suspense, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { FounderId, SceneId } from '../state/types'
 import { FirstPersonWorld, type FirstPersonHandle } from '../scenes/FirstPersonWorld'
 import { ErrorBoundary } from './ErrorBoundary'
 import { BigButton } from './ui'
+import { setStoryVisible } from '../voice/stageManager'
 const ImmersiveWorld = lazy(() => import('../world/ImmersiveWorld').then((module) => ({ default: module.ImmersiveWorld })))
 
 export type Mood = 'idle' | 'alarm' | 'win' | 'lose' | 'devin'
@@ -31,6 +32,7 @@ function LegacyWorld({ scene, mood = 'idle', active, shake, children, onSwitchVi
   const [controlError, setControlError] = useState('')
   const reducedMotion = !!useReducedMotion()
   const canExplore = scene !== 'devin'
+  useEffect(() => { setStoryVisible(!exploring || !canExplore) }, [exploring, canExplore])
   const controlClass = '!px-4 !py-2 !text-xs !tracking-normal !bg-panel !text-mint border border-line focus-visible:ring-2 focus-visible:ring-mint'
 
   return (

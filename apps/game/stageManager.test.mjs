@@ -15,6 +15,7 @@ test('scripted voice identity, reset and held-floor cancellation', async () => {
     isLiveSpeaking: () => liveSpeaking,
     noteScene: () => {},
     sayAsLive: () => { throw new Error('Scripted voices must not switch to Live') },
+    setConversationVisible: () => {},
   }
   globalThis.__stageTest = {
     subscribeSpeak: (cb) => { receive = cb; return () => { receive = null } },
@@ -37,6 +38,12 @@ test('scripted voice identity, reset and held-floor cancellation', async () => {
   const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
   const send = (tag, lines) => receive({ tag, lines, text: '' })
   try {
+    module.setStoryVisible(false)
+    send('hidden:dialogue', [{ who: 'sergio', text: 'Not visible' }])
+    await delay(450)
+    assert.equal(spoken.length, 0)
+    assert.equal(held, true)
+    module.setStoryVisible(true)
     send('E01:dialogue', [{ who: 'sergio', text: 'First' }, { who: 'kirill', text: 'Old queue' }])
     await delay(100)
     assert.deepEqual(spoken, [], 'text gets a visual lead before audio starts')
