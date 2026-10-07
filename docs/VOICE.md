@@ -24,7 +24,7 @@ VAD/turn-detection field. `model`, `instructions`, and `audio` are **immutable a
 ## Reliability and ordering
 
 - Scripted audio is render-driven: EventCard, Result, Ending and DevinMode enqueue a line only from a post-render effect after its exact text exists in the rendered scene. The stage then retains a 400 ms safety lead. The engine only updates voice context and never eagerly speaks hidden/bulk dialogue. In third-person exploration, the story panel and EventCard are not mounted until the player presses F; while closed the mic and remote audio are held and hidden decisions are rejected.
-- The Azure delegated `choose` call is primary. If it omits the tool call, an exact affirmative command reconstructed from Azure's own input transcript can dispatch through the same validated bridge after 900 ms. The conservative matcher accepts direct phrasing such as “proceed with founders only” and rejects questions, negation, ambiguity, muted/held input and duplicates. This is not a second browser speech recognizer. The Talk control reports when founder audio temporarily holds the microphone, when a choice is processing, and which option labels to say when listening; a resolved choice visibly confirms its label.
+- The Azure delegated `choose` call is primary. If it omits the tool call, an exact affirmative command reconstructed from Azure's own input transcript can dispatch through the same validated bridge after 900 ms. The conservative matcher accepts direct phrasing such as “proceed with founders only”, “select founders only” and a clear “let’s send the Devin” address to Sergio, but rejects questions, negation, ambiguity, muted/held input and duplicates. The live prompt delegates a clear choice immediately and waits for the game’s scripted reaction instead of adding banter. This is not a second browser speech recognizer. The Talk control reports when founder audio temporarily holds the microphone, when a choice is processing, and which option labels to say when listening; a resolved choice visibly confirms its label.
 - The conversation floor holds the microphone from the moment scripted dialogue is queued through visual lead, every line and inter-line gaps. At a new scene or choice reaction it cancels stale local lines, mutes the previous Azure reply, and discards old delegations; the remote audio stays muted until the next unheld player utterance, so an old reply cannot overlap the next founder dialogue. Session setup has a 20-second bound. A transient WebRTC `disconnected` state gets five seconds to recover; `failed` and `closed` remain terminal. Connection logs include peer and ICE state.
 
 ## Architecture
@@ -37,17 +37,17 @@ VAD/turn-detection field. `model`, `instructions`, and `audio` are **immutable a
   permission only on user action). Closed with `session.close` on restart, ending, or 10
   minutes of inactivity; read final usage from `session.closed`.
 - Tools run through **Responses delegation**: the `choose` function lives in
-  `delegation.responses.tools` with `tool_choice: "required"`. The live model talks; the
+  `delegation.responses.tools` with `tool_choice: "auto"`. The live model talks; the
   backend model picks the choice.
 - Per event, the client sends **two** things: (1) `session.instructions.append`
   (`delegation_id: null`, <= 500 tokens) with the event context so the voice knows what is
   happening, and (2) `session.update` with the **complete** `delegation.responses` object
-  (instructions with the same context + the `choose` tool + `tool_choice: "required"`).
+  (instructions with the same context + the `choose` tool + `tool_choice: "auto"`).
   Nested delegation fields are not patched; always send the whole object.
 - Tool call arrives as a `response.event` envelope; dispatch on `event.event.type ===
   "response.output_item.done"` where the item has `type: "function_call"`, `call_id`, `name`,
   `arguments`. Reply with `response.item.create` `{ type: "function_call_output", call_id,
-  output }`. Do not send `response.create`: the scripted reaction line plays instead and the live voice stays quiet until the player speaks again.
+  output }`, then send `response.create` to finish the pending Responses delegation. On an accepted choice, set `tool_choice: "none"` before continuing so a second `choose` cannot fire for the same event; the scripted reaction takes the audible floor.
 - The client validates `eventId`/`choiceId` against the active event and dispatches the same
   store action as a button click (`dispatchVoiceChoice` in `voiceBridge.ts`). Anything else
   the model says is shown as a caption (from `session.output_transcript.delta`) and does nothing.
@@ -121,9 +121,9 @@ Rules:
 - The route echoes the non-secret `delegation.responses` object back to the browser as
   `runway.responses`; the client resends it whole on every `session.update`, changing only
   `instructions` (event context appended) and `tool_choice`.
-- Client dedupes identical context pushes and per-event `choose` calls. After a tool result it
+- Client dedupes identical context pushes and per-event `choose` calls. After an accepted tool result it
   resends the delegation with `tool_choice: "none"` before `response.create`, so the
-  continuation cannot be forced into a second `choose`. Next event restores `required`.
+  continuation cannot be forced into a second `choose`. Next event restores `auto`.
 
 ## Session creation body (server route)
 

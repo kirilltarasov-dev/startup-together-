@@ -449,6 +449,7 @@ export function createLiveClient(): LiveClient {
       // event on auto so a later valid tool result can still resolve it.
       if (lastPushedText) sendDelegation(lastPushedText, 'none')
     }
+    send({ type: 'response.create' })
     // Choose is no longer in flight: the stage manager may resume scripted lines.
     setChooseInFlight(false)
   }

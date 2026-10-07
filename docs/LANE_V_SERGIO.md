@@ -42,16 +42,16 @@ TASK 1 — Server route (target 13:15)
 - Accepts `{ sdp }` from the browser, POSTs `{ session, transport: { type: "webrtc", sdp } }` to
   `${AZURE_OPENAI_ENDPOINT}/openai/v1/live/sessions` with header `api-key`, returns the JSON (session id + SDP answer) unchanged.
 - `session` = the exact body in VOICE.md "Session creation body": model = live deployment, base system prompt as `instructions`,
-  `audio.output.voice: "marin"`, `delegation.type: "responses"` with the `choose` function tool and `tool_choice: "required"`.
+  `audio.output.voice` from the configured Azure voice, `delegation.type: "responses"` with the `choose` function tool and `tool_choice: "auto"`.
   The schema is STRICT: do not add VAD, modalities, temperature, or any other field. Max session length 10 minutes (client-enforced).
-- Rate limit: max 3 sessions per IP per 10 minutes (in-memory Map is fine). Return 429 otherwise.
+- Updated October 7 for the shared corporate demo IP: max 30 session-creation attempts per IP per 10 minutes (in-memory per-instance Map, best effort). Return 429 once full; rejected retries do not extend the window. This replaces the original 3-attempt limit but is not durable global spending protection.
 - Test locally with `vercel dev` or by deploying a preview of `feat/voice`. `curl -X POST <preview>/api/voice/session` → token JSON.
 
 TASK 2 — Browser client `apps/game/src/voice/liveClient.ts`
 - On "Talk" click only: getUserMedia (mic), fetch `/api/voice/session`, open RTCPeerConnection + data channel per quickstart, attach remote audio.
 - Wait for `session.started` on the data channel before sending any command. Never send `session.start` over WebRTC.
 - On each `getVoiceContext()` change send BOTH: `session.instructions.append` `{ delegation_id: null, content: contextText }` and
-  `session.update` with the COMPLETE `delegation.responses` object (context in instructions + `choose` tool + `tool_choice: "required"`).
+  `session.update` with the COMPLETE `delegation.responses` object (context in instructions + `choose` tool + `tool_choice: "auto"`).
 - Tool call: listen for `response.event`; when `event.event.type === "response.output_item.done"` and the item is a `function_call`
   named `choose`, parse `arguments` → `{eventId, choiceId, constraint}`, sanitize `constraint` (strip newlines/backticks/URLs, cap 200 chars,
   reject `rm `, `curl`, `sudo`, `git push`, `token`, `key`), then `dispatchVoiceChoice(...)`. Reply with `response.item.create`

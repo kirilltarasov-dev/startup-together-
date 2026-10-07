@@ -214,7 +214,8 @@ test('respects mic hold at connect and session start, rejects held or muted tool
     event: { type: 'response.output_item.done', item: { type: 'function_call', name: 'choose', call_id: 'held-call', arguments: '{"eventId":"E01","choiceId":"focused"}' } },
   })
   assert.equal(dispatches, 0)
-  assert.equal(peer.dataChannel.sent.length, heldMessages + 1)
+  assert.equal(peer.dataChannel.sent.length, heldMessages + 2)
+  assert.deepEqual(peer.dataChannel.sent.slice(-2).map((message) => message.type), ['response.item.create', 'response.create'])
   assert.match(peer.dataChannel.sent.findLast((message) => message.item?.call_id === 'held-call').item.output, /held/)
 
   peer.dataChannel.receive({ type: 'session.delegation.created', delegation_id: 'processing' })
@@ -225,6 +226,8 @@ test('respects mic hold at connect and session start, rejects held or muted tool
     event: { type: 'response.output_item.done', item: { type: 'function_call', name: 'choose', call_id: 'processing-call', arguments: '{"eventId":"E01","choiceId":"focused"}' } },
   })
   assert.equal(dispatches, 1)
+  assert.deepEqual(peer.dataChannel.sent.slice(-3).map((message) => message.type), ['response.item.create', 'session.update', 'response.create'])
+  assert.equal(peer.dataChannel.sent.at(-2).session.delegation.responses.tool_choice, 'none')
 
   peer.dataChannel.receive({ type: 'session.delegation.created', delegation_id: 'muted' })
   client.setMuted(true)
@@ -235,6 +238,22 @@ test('respects mic hold at connect and session start, rejects held or muted tool
   })
   assert.equal(dispatches, 1)
   assert.match(peer.dataChannel.sent.findLast((message) => message.item?.call_id === 'muted-call').item.output, /muted/)
+
+  client.setMuted(false)
+  _setVoiceContext({ eventId: 'E02', contextText: 'NEXT EVENT', allowedChoices: [{ id: 'rush', label: 'Ship tonight' }] })
+  assert.equal(peer.dataChannel.sent.findLast((message) => message.session?.delegation).session.delegation.responses.tool_choice, 'auto')
+  client.setReplyHold(false)
+  client.setMicHold(false)
+  peer.dataChannel.receive({ type: 'session.input_transcript.delta', delta: 'Ship tonight' })
+  peer.dataChannel.receive({ type: 'session.delegation.created', delegation_id: 'next-event' })
+  peer.dataChannel.receive({
+    type: 'response.event',
+    delegation_id: 'next-event',
+    event: { type: 'response.output_item.done', item: { type: 'function_call', name: 'choose', call_id: 'next-call', arguments: '{"eventId":"E02","choiceId":"rush"}' } },
+  })
+  assert.equal(dispatches, 2)
+  assert.equal(peer.dataChannel.sent.at(-1).type, 'response.create')
+  assert.equal(FakePeerConnection.all.length, 1)
   client.disconnect()
   _setVoiceContext(null)
   _setVoiceDispatcher(() => false)

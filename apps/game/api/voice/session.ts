@@ -52,8 +52,9 @@ Interruption policy: yield when interrupted. Listen, then answer the updated int
 Delegation policy: delegate only when the player makes one direct, affirmative, unambiguous ALLOWED
 CHOICE. Do not delegate questions, quoted or passing mentions, negation, hedging, comparisons, or multiple
 choices. A bare mention of Devin is never a request to send Devin. For a clear choice, delegate immediately
-(do not ask for confirmation) and say one short line while the backend works. Handle banter yourself. If the
-intent is genuinely unclear, ask one short question. Never invent a backend result.
+(do not ask for confirmation) and wait for the game's scripted reaction instead of continuing the conversation.
+Handle banter yourself only when no choice was made. If the intent is genuinely unclear, ask one short question.
+Never invent a backend result.
 
 Context arrives quietly as SCENE SO FAR and CURRENT EVENT; use it, do not read it out.
 Only state Devin/test results that arrive as VERIFIED GAME RESULT from the game. Never
@@ -76,14 +77,15 @@ choiceId. Do not write prose. Do not call choose again after a function_call_out
 // In-memory per-instance rate limit. Best-effort only; Vercel edge instances are not shared.
 const hits = new Map<string, number[]>()
 const WINDOW_MS = 10 * 60 * 1000
-const MAX_PER_WINDOW = 3
+const MAX_PER_WINDOW = 30
 
 function rateLimited(ip: string): boolean {
   const now = Date.now()
   const arr = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS)
-  arr.push(now)
   hits.set(ip, arr)
-  return arr.length > MAX_PER_WINDOW
+  if (arr.length >= MAX_PER_WINDOW) return true
+  arr.push(now)
+  return false
 }
 
 export default async function handler(req: Request): Promise<Response> {
