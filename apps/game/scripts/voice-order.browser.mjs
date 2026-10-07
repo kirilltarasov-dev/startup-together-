@@ -55,7 +55,12 @@ try {
   assert.deepEqual(speech.map((entry) => entry.visible), [true, true, true, true])
   assert.match(speech[0].text, /social network for founders/)
   assert.match(speech[3].text, /Small market/)
-  console.log('VOICE_VISIBLE_ORDER_PASS', JSON.stringify(speech, null, 2))
+  await click('CONTINUE')
+  await page.waitForFunction(() => window.__runwaySpeech.some((entry) => entry.text.includes('I already tweeted the launch.')), { timeout: 15000 })
+  const afterTransition = await page.evaluate(() => window.__runwaySpeech)
+  assert.equal(afterTransition.at(-1).visible, true)
+  assert.equal(afterTransition.filter((entry) => entry.text === speech[3].text).length, 1)
+  console.log('VOICE_VISIBLE_ORDER_PASS', JSON.stringify(afterTransition, null, 2))
 } finally {
   await browser.close()
 }

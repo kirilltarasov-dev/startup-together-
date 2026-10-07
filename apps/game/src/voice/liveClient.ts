@@ -42,6 +42,7 @@ export interface LiveClient {
   /** Close/open the mic to Azure (floor policy, independent of the user's Mute). */
   setMicHold(hold: boolean): void
   setConversationVisible(visible: boolean): void
+  setReplyHold(hold: boolean): void
   /** Event dedupe shared by all choice paths. */
   isResolved(eventId: string): boolean
   markResolved(eventId: string): void
@@ -167,6 +168,8 @@ export function createLiveClient(): LiveClient {
   let liveAudioActive = false
   /** performance.now() of the last frame above LIVE_RMS_THRESHOLD. */
   let lastLoudAt = 0
+  let replyHold = false
+  let waitingForPlayer = false
   /** Cancellation-aware completion callbacks for sayAsLive's local waiters. */
   const sayWaiters = new Set<(completed: boolean) => void>()
 
@@ -179,9 +182,9 @@ export function createLiveClient(): LiveClient {
 
   const energyAvailable = () => analyser !== null
   /** Speaking = loud frame within the hangover window. Falls back to the transcript-driven UI status. */
-  const isLiveSpeaking = () => energyAvailable()
+  const isLiveSpeaking = () => !replyHold && !waitingForPlayer && (energyAvailable()
     ? liveAudioActive || performance.now() - lastLoudAt < LIVE_HANGOVER_MS
-    : state.status === 'speaking'
+    : state.status === 'speaking')
 
   /** Start metering the remote track. Never throws; on failure we keep the transcript heuristic. */
   const startEnergyMeter = (remote: MediaStream) => {
@@ -199,7 +202,7 @@ export function createLiveClient(): LiveClient {
       if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {})
       const buf = new Float32Array(an.fftSize)
       energyTimer = setInterval(() => {
-        if (!analyser) return
+        if (!analyser || replyHold || waitingForPlayer) return
         analyser.getFloatTimeDomainData(buf)
         let sum = 0
         for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
@@ -270,6 +273,7 @@ export function createLiveClient(): LiveClient {
       return
     }
     if (ctx.eventId !== lastCtxId) {
+      if (started && lastCtxId !== null) setReplyHold(true)
       lastCtxId = ctx.eventId
       commandTranscript = ''
       if (transcriptTimer) { clearTimeout(transcriptTimer); transcriptTimer = null }
@@ -416,9 +420,9 @@ export function createLiveClient(): LiveClient {
       const inputWasAllowed = delegationId
         ? delegationInputAllowed.get(delegationId) ?? lastDelegationInputAllowed
         : lastDelegationInputAllowed
-      if (state.muted || !conversationVisible) {
-        output = state.muted ? 'rejected: microphone muted' : 'rejected: story not visible'
-        console.info('[voice] choose ignored while muted or story closed', eventId)
+      if (state.muted || !conversationVisible || replyHold) {
+        output = state.muted ? 'rejected: microphone muted' : !conversationVisible ? 'rejected: story not visible' : 'rejected: scripted dialogue active'
+        console.info('[voice] choose ignored while input held', eventId)
       } else if (!inputWasAllowed) {
         output = 'rejected: microphone was held when this delegation started'
         console.info('[voice] choose ignored from held input', eventId)
@@ -476,15 +480,16 @@ export function createLiveClient(): LiveClient {
       case 'session.delegation.created': {
         const d = msg.delegation as { id?: string } | undefined
         const id = typeof d?.id === 'string' ? d.id : typeof msg.delegation_id === 'string' ? msg.delegation_id : typeof msg.id === 'string' ? msg.id : ''
-        lastDelegationInputAllowed = !state.muted && !micHeld
+        lastDelegationInputAllowed = !state.muted && !micHeld && conversationVisible && !replyHold
         if (id) {
           delegationStart.set(id, performance.now())
           delegationInputAllowed.set(id, lastDelegationInputAllowed)
         }
-        setChooseInFlight(true)
+        if (lastDelegationInputAllowed) setChooseInFlight(true)
         return
       }
       case 'session.output_transcript.delta': {
+        if (replyHold || waitingForPlayer) return
         const delta = typeof msg.delta === 'string' ? msg.delta : ''
         if (tLastHeard && !tFirstReplyAfterHeard) {
           tFirstReplyAfterHeard = performance.now()
@@ -496,6 +501,10 @@ export function createLiveClient(): LiveClient {
       }
       case 'session.input_transcript.delta': {
         const delta = typeof msg.delta === 'string' ? msg.delta : ''
+        if (waitingForPlayer && !replyHold && !micHeld && !state.muted && conversationVisible && delta) {
+          waitingForPlayer = false
+          updateRemoteMute()
+        }
         tLastHeard = performance.now(); tFirstReplyAfterHeard = 0
         // Scripted TTS holds the mic. While listening, a conservative whole-command matcher
         // guarantees direct allowed choices still work if the delegated router omits its tool call.
@@ -627,7 +636,7 @@ export function createLiveClient(): LiveClient {
       const localAudioEl = document.createElement('audio')
       audioEl = localAudioEl
       localAudioEl.autoplay = true
-      localAudioEl.muted = state.muted || !conversationVisible
+      localAudioEl.muted = state.muted || !conversationVisible || replyHold || waitingForPlayer
       localAudioEl.setAttribute('playsinline', '')
       localAudioEl.style.display = 'none'
       document.body.appendChild(localAudioEl)
@@ -718,6 +727,20 @@ export function createLiveClient(): LiveClient {
 
   let micHeld = false
   let conversationVisible = true
+  const updateRemoteMute = () => { if (audioEl) audioEl.muted = state.muted || !conversationVisible || replyHold || waitingForPlayer }
+  function setReplyHold(hold: boolean) {
+    replyHold = hold
+    if (hold) {
+      waitingForPlayer = true
+      setChooseInFlight(false)
+      for (const id of delegationInputAllowed.keys()) delegationInputAllowed.set(id, false)
+      lastDelegationInputAllowed = false
+      liveAudioActive = false
+      lastLoudAt = 0
+      if (state.status === 'speaking') set({ status: 'listening', caption: '' })
+    }
+    updateRemoteMute()
+  }
   const applyMic = () => {
     const on = !state.muted && !micHeld && conversationVisible
     try { stream?.getAudioTracks().forEach((t) => { t.enabled = on }) } catch { /* ignore */ }
@@ -727,13 +750,13 @@ export function createLiveClient(): LiveClient {
   function setConversationVisible(visible: boolean) {
     if (conversationVisible === visible) return
     conversationVisible = visible
-    if (audioEl) audioEl.muted = state.muted || !visible
+    updateRemoteMute()
     applyMic()
   }
 
   function setMuted(muted: boolean) {
     set({ muted })
-    if (audioEl) audioEl.muted = muted || !conversationVisible
+    updateRemoteMute()
     if (muted) for (const finish of [...sayWaiters]) finish(false)
     applyMic()
   }
@@ -762,6 +785,7 @@ export function createLiveClient(): LiveClient {
     isChooseInFlight: () => chooseInFlight,
     setMicHold,
     setConversationVisible,
+    setReplyHold,
     isResolved: (eventId) => resolvedEvents.has(eventId),
     markResolved: (eventId) => { resolvedEvents.add(eventId) },
     noteExternalChoice,

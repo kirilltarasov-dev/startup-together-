@@ -33,6 +33,7 @@ const queue: Job[] = []
 let current: Job | null = null
 let running = false
 const consumed = new Set<string>()
+let activeEventId: string | null = null
 let unsubSpeak: (() => void) | null = null
 let floorTimer: ReturnType<typeof setInterval> | null = null
 /** Bumped by stageReset so an in-flight runner abandons its loop. */
@@ -74,7 +75,7 @@ const setFloor = (f: Floor) => {
 /** Exactly one holder, priority order: narrating > processing > live_reply > listening. */
 function recomputeFloor(): void {
   const client = getLiveClient()
-  if (narratingLine) setFloor('narrating')
+  if (narratingLine || (storyVisible && (current?.lines.length || queue.length))) setFloor('narrating')
   else if (client.isChooseInFlight()) setFloor('processing')
   else if (client.isLiveSpeaking()) setFloor('live_reply')
   else setFloor('listening')
@@ -135,26 +136,37 @@ async function run(): Promise<void> {
     running = false
     current = null
     if (queue.length) void run() // payloads that arrived during a reset start a fresh generation
+    else if (storyVisible) getLiveClient().setReplyHold(false)
+    recomputeFloor()
   }
 }
 
 function onPayload(p: SpeakPayload): void {
   if (!storyVisible || consumed.has(p.tag)) return
+  const eventId = /^E\d+:/.exec(p.tag)?.[0].slice(0, -1)
+  const reaction = /:reaction:/.test(p.tag)
+  if (reaction || (eventId && activeEventId && eventId !== activeEventId)) {
+    stageCut()
+    queue.length = 0
+  }
+  if (eventId) activeEventId = eventId
   consumed.add(p.tag)
   const client = getLiveClient()
+  client.setReplyHold(true)
   client.noteScene(p) // quiet SCENE SO FAR context BEFORE the lines play
   const job: Job = { tag: p.tag, lines: p.lines.map((l) => ({ who: l.who, text: l.text })) }
-  if (/:reaction:/.test(p.tag)) {
+  if (reaction) {
     queue.unshift(job) // reactions jump the queue: play next
-  } else if (p.tag.endsWith(':dialogue')) {
-    // New event: let the current line finish, drop the rest of the old tag, then this tag.
-    if (current) current.lines.length = 0
-    if (current && !narratingLine) generation++
-    queue.length = 0
-    queue.push(job)
   } else {
+    if (p.tag.endsWith(':dialogue')) {
+      // New event: let the current line finish, drop the rest of the old tag, then this tag.
+      if (current) current.lines.length = 0
+      if (current && !narratingLine) generation++
+      queue.length = 0
+    }
     queue.push(job)
   }
+  recomputeFloor()
   void run()
 }
 
@@ -189,6 +201,7 @@ export function stageReset(): void {
   queue.length = 0
   if (current) current.lines.length = 0
   consumed.clear()
+  activeEventId = null
   speakingText = ''
   ttsReset()
   narratingLine = false

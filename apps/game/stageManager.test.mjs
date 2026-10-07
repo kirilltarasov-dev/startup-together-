@@ -8,6 +8,7 @@ test('scripted voice identity, reset and held-floor cancellation', async () => {
   let finish
   let held = false
   let liveSpeaking = false
+  let replyHeld = false
   const spoken = []
   const client = {
     setMicHold: (value) => { held = value },
@@ -16,6 +17,7 @@ test('scripted voice identity, reset and held-floor cancellation', async () => {
     noteScene: () => {},
     sayAsLive: () => { throw new Error('Scripted voices must not switch to Live') },
     setConversationVisible: () => {},
+    setReplyHold: (value) => { replyHeld = value },
   }
   globalThis.__stageTest = {
     subscribeSpeak: (cb) => { receive = cb; return () => { receive = null } },
@@ -45,13 +47,19 @@ test('scripted voice identity, reset and held-floor cancellation', async () => {
     assert.equal(held, true)
     module.setStoryVisible(true)
     send('E01:dialogue', [{ who: 'sergio', text: 'First' }, { who: 'kirill', text: 'Old queue' }])
+    assert.equal(held, true, 'mic closes immediately when dialogue is queued')
+    assert.equal(replyHeld, true, 'old live reply is silenced during dialogue')
     await delay(100)
     assert.deepEqual(spoken, [], 'text gets a visual lead before audio starts')
+    assert.equal(held, true, 'mic stays closed during visual lead')
     await delay(350)
     assert.deepEqual(spoken, [{ who: 'sergio', text: 'First' }])
+    finish()
+    await delay(300)
+    assert.equal(held, true, 'mic stays closed in the gap between queued lines')
     module.stageReset()
     send('E02:dialogue', [{ who: 'sadman', text: 'New scene' }])
-    await delay(700)
+    await delay(1050)
     assert.deepEqual(spoken.map((line) => line.text), ['First', 'New scene'])
     module.stageCut()
     await delay(300)
@@ -70,6 +78,17 @@ test('scripted voice identity, reset and held-floor cancellation', async () => {
     liveSpeaking = false
     await delay(150)
     assert.equal(spoken.length, 2)
+    module.stageReset()
+    send('E01:visible:0-1', [{ who: 'sergio', text: 'Old founder' }])
+    await delay(450)
+    send('E01:visible:1-2', [{ who: 'kirill', text: 'Old queue' }])
+    send('E01:reaction:focused', [{ who: 'sergio', text: 'Decision reaction' }])
+    await delay(850)
+    assert.equal(spoken.at(-1)?.text, 'Decision reaction')
+    assert.equal(spoken.some((line) => line.text === 'Old queue'), false)
+    send('E02:visible:0-1', [{ who: 'sadman', text: 'New founder' }])
+    await delay(850)
+    assert.equal(spoken.at(-1)?.text, 'New founder')
   } finally {
     cleanup()
     await delay(300)

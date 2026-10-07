@@ -263,6 +263,42 @@ test('invisible story mutes live audio and blocks hidden Azure choices', async (
   _setVoiceDispatcher(() => false)
 })
 
+test('a new dialogue silences an old Live reply until the next player utterance', async () => {
+  FakePeerConnection.all.length = 0
+  const track = new FakeTrack()
+  const audio = installSilentBrowser(async () => new FakeStream(track))
+  let dispatches = 0
+  _setVoiceContext({ eventId: 'E01', contextText: 'CURRENT EVENT', allowedChoices: [{ id: 'focused', label: 'Founders only' }] })
+  _setVoiceDispatcher(() => { dispatches++; return true })
+  const client = createLiveClient()
+  const peer = await connectStarted(client)
+  peer.dataChannel.receive({ type: 'session.delegation.created', delegation_id: 'old-turn' })
+  assert.equal(client.isChooseInFlight(), true)
+  client.setReplyHold(true)
+  assert.equal(client.isChooseInFlight(), false)
+  peer.dataChannel.receive({ type: 'session.delegation.created', delegation_id: 'held-turn' })
+  assert.equal(client.isChooseInFlight(), false)
+  client.setMicHold(true)
+  assert.equal(audio.at(-1).muted, true)
+  assert.equal(track.enabled, false)
+  peer.dataChannel.receive({ type: 'session.output_transcript.delta', delta: 'old reply' })
+  assert.equal(client.getState().caption, '')
+  client.setReplyHold(false)
+  client.setMicHold(false)
+  assert.equal(audio.at(-1).muted, true, 'stale reply stays muted after scripted lines finish')
+  peer.dataChannel.receive({ type: 'session.input_transcript.delta', delta: 'What happens next?' })
+  assert.equal(audio.at(-1).muted, false, 'the player can resume conversation')
+  peer.dataChannel.receive({ type: 'response.event', delegation_id: 'old-turn', event: { type: 'response.output_item.done', item: { type: 'function_call', name: 'choose', call_id: 'old-call', arguments: '{"eventId":"E01","choiceId":"focused"}' } } })
+  assert.equal(dispatches, 0, 'old delegation cannot decide after the next turn')
+  peer.dataChannel.receive({ type: 'session.delegation.created', delegation_id: 'new-turn' })
+  assert.equal(client.isChooseInFlight(), true)
+  peer.dataChannel.receive({ type: 'response.event', delegation_id: 'new-turn', event: { type: 'response.output_item.done', item: { type: 'function_call', name: 'choose', call_id: 'new-call', arguments: '{"eventId":"E01","choiceId":"focused"}' } } })
+  assert.equal(dispatches, 1)
+  client.disconnect()
+  _setVoiceContext(null)
+  _setVoiceDispatcher(() => false)
+})
+
 test('Azure transcript fallback rejects questions and held scripted audio', async () => {
   FakePeerConnection.all.length = 0
   installSilentBrowser(async () => new FakeStream())

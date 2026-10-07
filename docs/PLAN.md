@@ -1,5 +1,9 @@
 # Delivery Plan
 
+## Voice overlap at event transitions (October 7, 2026)
+
+Current voice session owns `apps/game/src/voice/{stageManager,liveClient}.ts`, focused tests `apps/game/{stageManager.test.mjs,liveClient.test.mjs}`, `apps/game/scripts/voice-order.browser.mjs` and this record on branch `fix/voice-dialogue-overlap`. Status: REVIEW. Report: GPT Live's old reply can overlap the next event's scripted founder audio after Talk is enabled. Queued scripted dialogue now holds the microphone through visual lead and inter-line gaps; the previous Live reply is muted through narration and until the next unheld player utterance; old delegations and leftover scripted lines cannot fire across choices/events. Evidence: 73/73 tests pass; production build and lint pass (pre-existing UI/3D warnings); mocked WebRTC and third-person browser E01 reaction → E02 voice order both pass with no Azure/provider call. Real Azure audio/acoustic verification on a working network remains pending. The user explicitly authorized push and merge after local verification; production audio still needs a listening test.
+
 ## Polish Phase 2 — Camera swing, true night, colliders, quality tiers (September 19-20, 2026)
 
 Branch `feat/polish2-integration` (base main@5524606). Workstreams feat/polish2-camera + feat/polish2-night merged; integrator wired quality -> lighting shadow maps + grass density.
