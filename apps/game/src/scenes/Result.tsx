@@ -21,7 +21,10 @@ export function Result() {
   }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (step === 3) { setStoryVisible(true); speakLines([RESULT_LINE], 'result:visible') } }, [step])
 
-  const go = () => { g.goScene('S2'); g.nextEvent(); g.setScreen('play') }
+  const go = () => {
+    if (useGame.getState().finishIfBankrupt()) return
+    g.goScene('S2'); g.nextEvent(); g.setScreen('play')
+  }
 
   return (
     <World scene="S1" mood="lose">

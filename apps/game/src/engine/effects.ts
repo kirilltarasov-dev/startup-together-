@@ -2,6 +2,8 @@ import type { Effects, GameState } from '../state/types'
 
 const clamp = (n: number) => Math.max(0, Math.min(100, n))
 
+export const outOfRunway = (state: Pick<GameState, 'mode' | 'cash'>) => state.mode === 'campaign' && state.cash <= 0
+
 export function applyEffects(state: GameState, fx: Effects): Partial<GameState> {
   return {
     cash: Math.max(0, state.cash + (fx.cash ?? 0) + (state.mode === 'campaign' ? Math.max(0, fx.days ?? 0) * (state.revenue - state.dailyBurn) : 0)),

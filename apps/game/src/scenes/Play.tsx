@@ -53,6 +53,8 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
   /** Single entry point for buttons AND voice (via App → connectVoiceBridge). */
   const choose = (c: Choice, constraint?: string) => {
     if (!event) return
+    const latest = useGame.getState()
+    if (latest.screen !== 'play' || latest.finishIfBankrupt()) return
     if (c.engineeringMission) {
       if (g.resolved[event.id]) return
       g.markResolved(event.id, c.id)
@@ -82,6 +84,7 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
 
   function next() {
     if (!event) return
+    if (useGame.getState().finishIfBankrupt()) return
     const idx = g.eventIndex
     const nextEv: GameEvent | undefined = sequence[idx + 1]
     if (event.id === 'E02') { g.setScreen('result'); return }
@@ -91,6 +94,7 @@ export function Play({ voiceSlot }: { voiceSlot?: React.ReactNode }) {
   }
 
   const walkThroughDoor = () => {
+    if (useGame.getState().finishIfBankrupt()) return
     const nextEv = sequence[g.eventIndex + 1]
     sfx('door')
     setDoor(false)

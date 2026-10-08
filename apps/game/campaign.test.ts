@@ -95,6 +95,63 @@ test('campaign cashflow advances on encounters, not wall-clock waiting; demo is 
   assert.equal(result.cash, 0)
 })
 
+test('spending the last cash preserves the reaction, then Continue ends without advancing', () => {
+  for (const cash of [9, 1]) {
+    useGame.getState().start('campaign')
+    const index = CAMPAIGN_EVENTS.findIndex(e => e.id === 'C1')
+    useGame.getState().set({ cash, eventIndex: index })
+    const event = currentEvent(useGame.getState())!
+    useGame.getState().enterEvent(event.id, event.onEnter)
+    assert.ok(resolveChoice(event, 'buy')?.reaction)
+    const reaction = useGame.getState()
+    assert.equal(reaction.cash, 0)
+    assert.equal(reaction.screen, 'play')
+    assert.deepEqual(buildVoiceContext(event, reaction)?.allowedChoices, [{ id: 'continue', label: 'Continue' }])
+    assert.equal(resolveChoice(event, event.choices[1].id), null)
+    // Button and voice Continue both use this terminal guard before scene transitions.
+    assert.equal(reaction.finishIfBankrupt(), true)
+    reaction.nextEvent()
+    assert.equal(useGame.getState().eventIndex, index)
+    assert.equal(useGame.getState().screen, 'ending')
+    assert.equal(campaignEnding(useGame.getState()), 'OUT OF RUNWAY')
+  }
+})
+
+test('entry burn ends before any new choice or mission; positive cash and demo still proceed', () => {
+  const index = CAMPAIGN_EVENTS.findIndex(e => e.id === 'E04')
+  useGame.getState().start('campaign')
+  useGame.getState().set({ cash: 6, dailyBurn: 3, eventIndex: index })
+  const event = currentEvent(useGame.getState())!
+  useGame.getState().enterEvent(event.id, { days: 2 })
+  assert.equal(useGame.getState().screen, 'ending')
+  assert.equal(buildVoiceContext(event, useGame.getState()), null)
+  assert.equal(resolveChoice(event, 'send_devin'), null)
+  assert.equal(resolveChoice(event, 'disable_feed'), null)
+  assert.equal(useGame.getState().resolved.E04, undefined)
+  for (const mode of ['campaign', 'demo'] as const) {
+    useGame.getState().start(mode)
+    useGame.getState().set({ cash: mode === 'campaign' ? 7 : 0, dailyBurn: 3 })
+    useGame.getState().enterEvent('E01', { days: 2 })
+    assert.equal(useGame.getState().screen, 'play')
+    assert.equal(useGame.getState().finishIfBankrupt(), false)
+    useGame.getState().nextEvent()
+    assert.equal(useGame.getState().eventIndex, 1)
+  }
+})
+
+test('old zero-cash saves cannot resume spending or a pending mission', () => {
+  for (const screen of ['play', 'result', 'devin'] as const) {
+    useGame.getState().start('campaign')
+    useGame.getState().set({ cash: 0, screen, resolved: { E04: 'send_devin' }, eventIndex: CAMPAIGN_EVENTS.findIndex(e => e.id === 'E04') })
+    useGame.getState().restart()
+    assert.equal(useGame.getState().resumeCampaign(), true)
+    assert.equal(useGame.getState().screen, 'ending')
+    assert.equal(useGame.getState().cash, 0)
+    assert.equal(useGame.getState().missionOutcome, 'none')
+    assert.equal(campaignEnding(useGame.getState()), 'OUT OF RUNWAY')
+  }
+})
+
 test('save roundtrip keeps choice history but never restores arbitrary properties', () => {
   useGame.getState().start('campaign')
   resolveChoice(currentEvent(useGame.getState())!, 'focused')
@@ -140,7 +197,8 @@ test('100 deterministic paths finish with valid resources and legal voice contex
       const state = useGame.getState()
       const event = currentEvent(state)!
       state.enterEvent(event.id, event.onEnter)
-      const context = buildVoiceContext(event, state)
+      if (useGame.getState().screen === 'ending') break
+      const context = buildVoiceContext(event, useGame.getState())
       assert.equal(!!context, !!event.voice)
       random = (Math.imul(random, 1664525) + 1013904223) >>> 0
       const choice = event.choices[random % event.choices.length]
@@ -151,8 +209,10 @@ test('100 deterministic paths finish with valid resources and legal voice contex
       }
       const next = useGame.getState()
       for (const key of ['cash', 'users', 'health', 'morale', 'trust', 'debt', 'day'] as const) assert.ok(Number.isFinite(next[key]) && next[key] >= 0)
+      if (next.finishIfBankrupt()) break
     }
-    assert.equal(Object.keys(useGame.getState().resolved).length, 35)
+    if (useGame.getState().cash > 0) assert.equal(Object.keys(useGame.getState().resolved).length, 35)
+    else assert.equal(useGame.getState().screen, 'ending')
     endings.add(campaignEnding(useGame.getState()))
   }
   assert.ok(endings.size >= 3, `Only ${endings.size} endings reached`)

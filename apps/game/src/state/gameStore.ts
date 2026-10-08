@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Effects, EventId, GameMode, GameState, Screen, SceneId } from './types'
-import { applyEffects } from '../engine/effects.ts'
+import { applyEffects, outOfRunway } from '../engine/effects.ts'
 import { loadCampaign, saveCampaign } from './campaignSave.ts'
 const newRunId = () => Math.random().toString(36).slice(2, 10)
 
@@ -47,6 +47,7 @@ interface Actions {
   apply: (fx: Effects) => void
   markResolved: (eventId: EventId, choiceId: string) => void
   nextEvent: () => void
+  finishIfBankrupt: () => boolean
   set: (patch: Partial<GameState>) => void
   restart: () => void
 }
@@ -58,6 +59,10 @@ export const useGame = create<GameState & Actions>((set, get) => ({
   resumeCampaign: () => {
     const saved = loadCampaign(initialState())
     if (!saved) return false
+    if (outOfRunway(saved)) {
+      set({ ...saved, screen: 'ending' })
+      return true
+    }
     if (saved.missionOutcome === 'none' && saved.resolved.E04 === 'send_devin') {
       Object.assign(saved, applyEffects(saved, { health: 10, users: -300, flags: { interruptedMission: true } }))
       saved.missionOutcome = 'skipped'
@@ -69,7 +74,11 @@ export const useGame = create<GameState & Actions>((set, get) => ({
   enterEvent: (id, fx) => {
     const state = get()
     if (state.enteredEvents[id]) return
-    set({ ...applyEffects(state, fx ?? {}), enteredEvents: { ...state.enteredEvents, [id]: true } })
+    if (get().finishIfBankrupt()) return
+    const effects = applyEffects(state, fx ?? {})
+    set({ ...effects, enteredEvents: { ...state.enteredEvents, [id]: true },
+      ...(outOfRunway({ ...state, ...effects }) ? { screen: 'ending' as const } : {}),
+    })
   },
   setScreen: (screen) => set({ screen }),
   goScene: (scene) => set({ scene, location: SCENE_LOCATION[scene], day: Math.max(get().day, scene === 'S1' ? 1 : scene === 'S2' ? 42 : 71) }),
@@ -78,7 +87,15 @@ export const useGame = create<GameState & Actions>((set, get) => ({
   apply: (fx) => set(applyEffects(get(), fx)),
 
   markResolved: (eventId, choiceId) => set({ resolved: { ...get().resolved, [eventId]: choiceId } }),
-  nextEvent: () => set({ eventIndex: get().eventIndex + 1 }),
+  finishIfBankrupt: () => {
+    if (!outOfRunway(get())) return false
+    set({ screen: 'ending' })
+    return true
+  },
+  nextEvent: () => {
+    if (get().finishIfBankrupt()) return
+    set({ eventIndex: get().eventIndex + 1 })
+  },
 
   restart: () => set({ ...initialState() }),
 }))

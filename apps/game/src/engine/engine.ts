@@ -1,7 +1,7 @@
 /** Pure game rules from docs/SKIT.md. No rendering, no input. */
 import { EVENTS } from '../events/skit.ts'
 import { CAMPAIGN_EVENTS, campaignEventAt, campaignEnding } from '../events/campaign.ts'
-import { applyEffects } from './effects.ts'
+import { applyEffects, outOfRunway } from './effects.ts'
 import { useGame } from '../state/gameStore.ts'
 import { _setVoiceContext, _setVoiceDispatcher, formatLines, type VoiceContext } from '../state/voiceBridge.ts'
 import type { Choice, GameEvent, GameState } from '../state/types'
@@ -25,7 +25,7 @@ export const ending = (s: GameState) => s.mode === 'campaign' ? campaignEnding(s
 export function resolveChoice(event: GameEvent, choiceId: string): Choice | null {
   const g = useGame.getState()
   const active = currentEvent(g)
-  if (g.resolved[event.id] || active?.id !== event.id) return null
+  if (g.screen !== 'play' || outOfRunway(g) || g.resolved[event.id] || active?.id !== event.id) return null
   const choice = active.choices.find((c) => c.id === choiceId)
   if (!choice) return null
   g.set({ ...applyEffects(g, choice.effects ?? {}), resolved: { ...g.resolved, [event.id]: choice.id } })
@@ -53,7 +53,7 @@ ALLOWED CHOICES: continue = "Continue" (advance to the next scene).`,
       allowedChoices: [{ id: 'continue', label: 'Continue' }],
     }
   }
-  if (!event.voice) return null
+  if (outOfRunway(s) || !event.voice) return null
   const allowed = event.choices.map((c) => ({ id: c.id, label: c.label }))
   let contextText = ''
   if (event.id === 'E01') {
