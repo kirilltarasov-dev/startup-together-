@@ -11,7 +11,7 @@ const choice = (id: string, label: string, effects: Effects, reaction: Line): Ch
 })
 const beat = (n: number, chapter: number, title: string, dialogue: Line[], choices: Choice[], extra: Partial<GameEvent> = {}): GameEvent => ({
   id: `C${n}`, scene: (chapter === 1 ? 'S1' : chapter <= 3 ? 'S2' : 'S3') as SceneId,
-  chapter: CHAPTERS[chapter - 1], icon: '', title, dialogue, choices,
+  chapter: CHAPTERS[chapter - 1], icon: '', title, dialogue, choices, voice: true,
   onEnter: chapter > 1 ? { days: 2 } : undefined, ...extra,
 })
 const original = (id: string, chapter: number): GameEvent => ({ ...EVENTS.find((event) => event.id === id)!, chapter: CHAPTERS[chapter - 1] })

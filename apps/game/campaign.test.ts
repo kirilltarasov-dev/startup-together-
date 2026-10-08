@@ -18,12 +18,38 @@ test('demo stays five decisions; campaign has 35 unique encounters and one missi
   assert.equal(CAMPAIGN_EVENTS.length, 35)
   assert.equal(new Set(CAMPAIGN_EVENTS.map((e) => e.id)).size, 35)
   assert.equal(CAMPAIGN_EVENTS.flatMap((e) => e.choices).filter((c) => c.engineeringMission).length, 1)
-  assert.deepEqual(CAMPAIGN_EVENTS.filter((e) => e.voice).map((e) => e.id), ['E01', 'E02', 'E03', 'E04', 'E05'])
+  assert.ok(CAMPAIGN_EVENTS.every((e) => e.voice), 'Talk is available on every campaign event')
   for (const event of CAMPAIGN_EVENTS) {
     assert.ok(event.dialogue.length >= 3)
     assert.ok(event.choices.length >= 2)
     assert.equal(new Set(event.choices.map((c) => c.id)).size, event.choices.length)
     for (const choice of event.choices) assert.ok(choice.effects || choice.engineeringMission)
+  }
+})
+
+test('Talk receives current choices on every campaign beat and its conditional variant', () => {
+  for (const [index, original] of CAMPAIGN_EVENTS.entries()) {
+    for (const variant of [false, true]) {
+      const state = initialState()
+      state.mode = 'campaign'
+      state.eventIndex = index
+      if (variant && original.variant) {
+        if (original.variant.when === 'mission_success') state.missionOutcome = 'success'
+        else state.flags[original.variant.when] = true
+      }
+      const event = campaignEventAt(index, state)!
+      const context = buildVoiceContext(event, state)
+      assert.ok(event.voice, `${event.id}: show Talk`)
+      assert.equal(context?.eventId, event.id)
+      assert.deepEqual(context?.allowedChoices, event.choices.map(({ id, label }) => ({ id, label })))
+      assert.equal(context?.linesText, event.dialogue.map(({ who, text }) => `${who[0].toUpperCase()}${who.slice(1)}: ${text}`).join('\n'))
+      // Once the safe choice is made, the same control becomes voice Continue.
+      const choice = event.choices.find(c => !c.engineeringMission)!
+      state.resolved[event.id] = choice.id
+      const next = buildVoiceContext(event, state)
+      assert.equal(next?.eventId, `${event.id}:continue`)
+      assert.deepEqual(next?.allowedChoices, [{ id: 'continue', label: 'Continue' }])
+    }
   }
 })
 

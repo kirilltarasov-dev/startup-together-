@@ -295,3 +295,8 @@ DOING — Codex claims src/voice/tts.ts, src/voice/recordedSpeech.ts, recordedSp
 DOING — user explicitly adds all remaining game repairs including bending to the release. Codex claims the matching CharacterAnimator/breathingPose, EventCard, engine, liveClient, stageManager, ImmersiveWorld, session prompt and regression tests/browser harness in this isolated checkout. Preserve experimental audition endpoints and research tools in the original working tree.
 
 REVIEW — final release includes all requested runtime repairs plus 177 approved recordings. 81/81 tests, typecheck and production build pass; existing lint warnings remain. WAV hashes and built copies verified. Local preview binding fails EPERM in the managed environment, so fresh browser/deployed verification is pending. GitHub access from this environment fails at proxy.muc. User must execute the prepared non-force push from their network-capable terminal.
+
+
+REVIEW — October 8 campaign Talk fix. Current Codex claims apps/game/src/events/campaign.ts and apps/game/campaign.test.ts. User reports missing Talk at C12; campaign beat helper omitted voice eligibility. Enable all campaign beats, preserving current dialogue and choices. Focused tests pass for all 35 events and conditional variants, including post-choice Continue. Browser and production checks remain pending.
+
+Campaign Talk release checks: npm test, npm run build (including TypeScript), and npm run lint passed on October 8; lint retains inherited scene warnings. Browser verification remains pending because the local preview listener was rejected by the managed environment.
