@@ -1,9 +1,10 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef, type RefObject } from 'react'
-import { AnimationMixer, Bone, LoopOnce, LoopRepeat, MathUtils, Quaternion, Vector3, type AnimationAction, type AnimationClip, type Object3D } from 'three'
+import { AnimationMixer, Bone, LoopOnce, LoopRepeat, MathUtils, Vector3, type AnimationAction, type AnimationClip, type Object3D } from 'three'
 import type { EcctrlHandle } from 'ecctrl'
 import { DEFAULT_RULES, LocomotionMachine, type LocomotionState } from './locomotionState'
 import { LOCOMOTION, WALK_CLIP } from './playerBody'
+import { BreathingPose } from './breathingPose'
 
 /**
  * Locomotion animator: idle | walk | run | jump_takeoff | airborne | land driven by controller evidence
@@ -38,7 +39,7 @@ interface Rig {
   /** Walk clip frozen at its mid-stride (double-support) pose: airborne fallback when no jump/fall clip exists. */
   pose: AnimationAction | null
   face: AnimationAction | null
-  spine: Bone | null
+  breathing: BreathingPose | null
   toes: Bone[]
   all: AnimationAction[]
   machine: LocomotionMachine
@@ -90,7 +91,7 @@ function buildRig(mixer: AnimationMixer, model: Object3D, clips: AnimationClip[]
     if (/toebase$/i.test(object.name)) toes.push(object)
   })
   const machine = new LocomotionMachine({ ...DEFAULT_RULES, walkThreshold: LOCOMOTION.walkThreshold, runThreshold: LOCOMOTION.runThreshold, landDuration: slots.land ? Math.min(slots.land.duration, 0.6) : DEFAULT_RULES.landDuration })
-  return { slots, idle, walk, run, jump, fall, land, pose, face, spine, toes, all, machine, usingWalkAsRunFallback: !run, airbornePoseFallback: !fall }
+  return { slots, idle, walk, run, jump, fall, land, pose, face, breathing: spine ? new BreathingPose(spine) : null, toes, all, machine, usingWalkAsRunFallback: !run, airbornePoseFallback: !fall }
 }
 
 const approach = (value: number, target: number, step: number) => value < target ? Math.min(target, value + step) : Math.max(target, value - step)
@@ -101,7 +102,7 @@ export function CharacterAnimator({ model, clips, controller, paused }: { model:
   const reducedMotion = useMemo(() => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches, [])
   const rigRef = useRef<Rig | null>(null)
   // Imperative handles mutated per frame (canvas dataset for tests/debug, model root for the landing dip).
-  const runtime = useRef({ fade: FADE.locomotion, landedAt: -1, elapsed: 0, nextBlink: 4, breath: new Quaternion(), lastAnim: '' as LocomotionState | '', canvas: null as HTMLCanvasElement | null, root: null as Object3D | null, frame: 0, probe: new Vector3() })
+  const runtime = useRef({ fade: FADE.locomotion, landedAt: -1, elapsed: 0, nextBlink: 4, lastAnim: '' as LocomotionState | '', canvas: null as HTMLCanvasElement | null, root: null as Object3D | null, frame: 0, probe: new Vector3() })
   useEffect(() => { runtime.current.canvas = gl.domElement; runtime.current.root = model }, [gl, model])
   useEffect(() => () => { mixer.stopAllAction(); mixer.uncacheRoot(model) }, [mixer, model])
   // Build inside the effect (not useMemo) so the previous rig is torn down before the next one reuses cached actions.
@@ -115,6 +116,7 @@ export function CharacterAnimator({ model, clips, controller, paused }: { model:
       handle.canvas.dataset.clipSlots = Object.keys(rig.slots).join(',')
     }
     return () => {
+      rig.breathing?.restore()
       rigRef.current = null
       rig.all.forEach((action) => action.stop())
       rig.all.forEach((action) => mixer.uncacheClip(action.getClip()))
@@ -187,12 +189,13 @@ export function CharacterAnimator({ model, clips, controller, paused }: { model:
     const sinceLanding = run.landedAt < 0 ? Infinity : run.elapsed - run.landedAt
     if (run.root) run.root.position.y = !rig.land && sinceLanding < LAND_DIP.duration ? LAND_DIP.depth * (1 - sinceLanding / LAND_DIP.duration) : 0
 
+    rig.breathing?.restore()
     mixer.update(delta)
 
     // --- presence: idle breathing (post-mixer micro-rotation on Spine1, fades out with speed) ----------------
-    if (rig.spine && !reducedMotion && (step.state === 'idle' || step.state === 'walk')) {
+    if (rig.breathing && !reducedMotion && (step.state === 'idle' || step.state === 'walk')) {
       const angle = MathUtils.degToRad(BREATH.degrees) * (1 - step.walkBlend) * Math.sin(run.elapsed * Math.PI * 2 * BREATH.hz)
-      rig.spine.quaternion.multiply(run.breath.set(Math.sin(angle / 2), 0, 0, Math.cos(angle / 2)))
+      rig.breathing.apply(angle)
     }
 
     if (run.lastAnim !== step.state && run.canvas) { run.lastAnim = step.state; run.canvas.dataset.anim = step.state }

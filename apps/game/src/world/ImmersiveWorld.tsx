@@ -44,10 +44,12 @@ export function ImmersiveWorld({ scene, mood = 'idle', active, children, onSwitc
     {!forced && <header className="absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-between gap-2 pointer-events-none">
       <section className="rounded-xl bg-panel/90 p-3"><img src="/assets/branding/cognition-light.png" alt="Cognition" className="h-5 w-auto" /><p className="mt-2 text-xs text-mint">RUNWAY · THIRD PERSON</p></section>
       <nav className="flex flex-wrap gap-2 pointer-events-auto" aria-label="Third-person controls">
-        <BigButton className={button} onClick={onSwitchView}>FIRST-PERSON VIEW</BigButton>
-        <label className="rounded border border-line bg-panel p-2 text-xs">Character <select aria-label="Character appearance" value={selected} onChange={(event) => setSelected(event.target.value as CharacterId)} className="bg-panel text-mint">{CHARACTERS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-        <QualitySelect />
-        <BigButton className={button} onClick={() => controls.current?.reset()}>RESET POSITION</BigButton>
+        {!story && <>
+          <BigButton className={button} onClick={onSwitchView}>FIRST-PERSON VIEW</BigButton>
+          <label className="rounded border border-line bg-panel p-2 text-xs">Character <select aria-label="Character appearance" value={selected} onChange={(event) => setSelected(event.target.value as CharacterId)} className="bg-panel text-mint">{CHARACTERS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <QualitySelect />
+          <BigButton className={button} onClick={() => controls.current?.reset()}>RESET POSITION</BigButton>
+        </>}
         <BigButton className={button} onClick={() => setStory((open) => !open)}>{story ? 'BACK TO WORLD' : 'TALK TO FOUNDERS · F'}</BigButton>
       </nav>
     </header>}

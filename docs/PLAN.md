@@ -286,3 +286,12 @@ Codex also owns the `package.json` test command only, to include the silent regr
 - Voice is now requested work; Balaton and extra systems remain deferred.
 - Multiplayer, accounts, backend infrastructure, and an engine rewrite are not polish.
 - Post-hackathon expansion requires new requirements and a new plan.
+
+
+## Recorded voice production release — October 8, 2026
+
+DOING — Codex claims src/voice/tts.ts, src/voice/recordedSpeech.ts, recordedSpeech.test.ts, .devin/scripted-voices/, public/assets/voices/ and the focused test command in apps/game/package.json for this isolated release. User authorized production publication after approving Gonzalo and Dmitry English audio. Base is prior production e587bee; unrelated working-tree edits are preserved in the original checkout.
+
+DOING — user explicitly adds all remaining game repairs including bending to the release. Codex claims the matching CharacterAnimator/breathingPose, EventCard, engine, liveClient, stageManager, ImmersiveWorld, session prompt and regression tests/browser harness in this isolated checkout. Preserve experimental audition endpoints and research tools in the original working tree.
+
+REVIEW — final release includes all requested runtime repairs plus 177 approved recordings. 81/81 tests, typecheck and production build pass; existing lint warnings remain. WAV hashes and built copies verified. Local preview binding fails EPERM in the managed environment, so fresh browser/deployed verification is pending. GitHub access from this environment fails at proxy.muc. User must execute the prepared non-force push from their network-capable terminal.

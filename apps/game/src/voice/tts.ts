@@ -1,9 +1,10 @@
-// Browser speech synthesis for SCRIPTED founder lines, one distinct voice per character.
+// Recorded audio for approved scripted lines, with original browser voices as fallback.
 // GPT-Live (Azure) is locked to a single voice per session, so live conversation is Sergio /
-// the Investor only; Sadman and Kirill are heard through these local voices. Free, no backend.
+// the Investor only. Scripted playback never creates a paid session.
 // Restore earlier locale preferences; pronunciation depends on installed voices.
 // Never simulate accents with heavy pitch shifts or select novelty voices.
 // Sequencing (one speaker at a time) lives in stageManager.ts; this module plays ONE line.
+import { cancelRecordings, playRecording, recordedClip, recordedVoiceReport } from './recordedSpeech.ts'
 
 type Who = 'kirill' | 'sadman' | 'sergio' | 'investor' | string
 
@@ -29,6 +30,7 @@ const PREFER_HINTS = ['google', 'enhanced', 'premium', 'natural', 'siri']
 
 let muted = false
 let enabled = true
+let generation = 0
 const voiceCache = new Map<string, { voice: SpeechSynthesisVoice | null; rule: string }>()
 const pending = new Set<() => void>()
 
@@ -75,7 +77,19 @@ function resolve(who: Who): { voice: SpeechSynthesisVoice | null; rule: string; 
 }
 
 /** Speak ONE line in `who`'s voice; resolves on end/error/cancel, or at once if unsupported/muted. */
-export function speakLine(who: string, text: string): Promise<void> {
+export async function speakLine(who: string, text: string): Promise<void> {
+  if (!enabled || muted || !text.trim()) return
+  const gen = generation
+  const clip = recordedClip(who, text)
+  if (clip) {
+    const outcome = await playRecording(clip)
+    if (outcome !== 'unavailable' || gen !== generation || !enabled || muted) return
+    console.warn('[voice] Recorded line unavailable; using browser voice', who)
+  }
+  return speakBrowserLine(who, text)
+}
+
+function speakBrowserLine(who: string, text: string): Promise<void> {
   if (!supported() || !enabled || muted || !text.trim()) return Promise.resolve()
   return new Promise<void>((done) => {
     const r = resolve(who)
@@ -111,6 +125,8 @@ export function ttsIsMuted(): boolean { return muted }
 
 /** Cancellation need not emit browser events; settle our own waiters. */
 export function ttsCancel(): void {
+  generation++
+  cancelRecordings()
   try { window.speechSynthesis?.cancel() } catch { /* ignore */ }
   for (const finish of [...pending]) finish()
 }
@@ -142,11 +158,14 @@ export function initTts(): () => void {
 
 /** For debugging in the console: which system voice each founder resolved to, and by which rule. */
 export function ttsVoiceReport(): Record<string, string> {
-  if (!supported()) return {}
+  if (!supported()) return recordedVoiceReport()
   const out: Record<string, string> = {}
   for (const who of Object.keys(PROFILES)) {
     const r = resolve(who)
     out[who] = r.voice ? `${r.voice.name} (${r.voice.lang}) [${r.rule}; pitch ${r.pitch} rate ${r.rate}]` : `none [${r.rule}]`
+  }
+  for (const [who, recording] of Object.entries(recordedVoiceReport())) {
+    out[who] = `${recording}; browser fallback: ${out[who] ?? 'unavailable'}`
   }
   return out
 }

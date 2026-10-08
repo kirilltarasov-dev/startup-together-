@@ -47,7 +47,7 @@ export function buildVoiceContext(event: GameEvent | undefined, s: GameState): V
   if (continueAvailable(event, s)) {
     return {
       eventId: `${event.id}:continue`,
-      contextText: `CURRENT EVENT: ${event.id} is decided; the card shows CONTINUE.
+      contextText: `CURRENT EVENT: ${event.id}:continue. ${event.id} is decided; the card shows CONTINUE.
 YOUR ROLE: Sergio (you). If the player says continue / next / go on (or clearly wants to move on), delegate choice "continue". Otherwise banter briefly.
 ALLOWED CHOICES: continue = "Continue" (advance to the next scene).`,
       allowedChoices: [{ id: 'continue', label: 'Continue' }],
@@ -98,7 +98,7 @@ export function connectVoiceBridge(onChoice: (event: GameEvent, choiceId: string
   _setVoiceDispatcher((eventId, choiceId, constraint) => {
     const s = useGame.getState()
     const ev = currentEvent(s)
-    if (!ev) return false
+    if (!ev || s.screen !== 'play') return false
     if (eventId === `${ev.id}:continue`) return choiceId === 'continue' && continueAvailable(ev, s) && onChoice(ev, 'continue')
     if (ev.id !== eventId) return false
     return onChoice(ev, choiceId, constraint)

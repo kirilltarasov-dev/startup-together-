@@ -389,3 +389,31 @@ test('falls back to an exact Azure transcript command and cancels sayAsLive wait
   client.disconnect()
   _setVoiceDispatcher(() => false)
 })
+
+test('English continue survives processing hold and never disarms the next event', async () => {
+  installSilentBrowser(async () => new FakeStream())
+  const applied = []
+  _setVoiceContext({ eventId: 'E01:continue', contextText: 'E01:continue', allowedChoices: [{ id: 'continue', label: 'Continue' }] })
+  _setVoiceDispatcher((eventId, choiceId) => {
+    applied.push([eventId, choiceId])
+    _setVoiceContext({ eventId: 'E02', contextText: 'E02 choices', allowedChoices: [{ id: 'careful', label: 'Test the launch' }] })
+    return true
+  })
+  const client = createLiveClient()
+  const peer = await connectStarted(client)
+  try {
+    peer.dataChannel.receive({ type: 'session.input_transcript.delta', delta: 'Continue.' })
+    peer.dataChannel.receive({ type: 'session.delegation.created', delegation_id: 'continue-turn' })
+    client.setMicHold(true)
+    await new Promise((resolve) => setTimeout(resolve, 950))
+    assert.deepEqual(applied, [['E01:continue', 'continue']])
+    const updates = peer.dataChannel.sent.filter((event) => event.type === 'session.update')
+    assert.equal(updates.at(-1).session.delegation.responses.tool_choice, 'auto')
+    assert.match(updates.at(-1).session.delegation.responses.instructions, /E02 choices/)
+    client.setReplyHold(false)
+    client.setMicHold(false)
+    peer.dataChannel.receive({ type: 'session.input_transcript.delta', delta: 'continue' })
+    await new Promise((resolve) => setTimeout(resolve, 950))
+    assert.equal(applied.length, 1, 'continue cannot choose an unresolved event')
+  } finally { client.disconnect(); _setVoiceContext(null); _setVoiceDispatcher(() => false) }
+})

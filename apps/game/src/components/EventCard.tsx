@@ -74,19 +74,19 @@ export function EventCard({ event, reaction, onChoose, onContinue, onSpeaker, ur
       transition={{ type: 'spring', stiffness: 120, damping: 18 }}
       className={`w-full max-w-4xl rounded-2xl border bg-[#1A1B1E]/95 backdrop-blur p-6 ${urgent ? 'border-[#FF5A5F] shadow-[0_0_60px_-15px_#FF5A5F]' : 'border-line'}`}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className={`text-[10px] tracking-[0.3em] ${urgent ? 'text-[#FF5A5F]' : 'opacity-50'}`}>{event.id} · {urgent ? 'PRODUCTION INCIDENT' : event.chapter ?? event.scene}</div>
           <h2 className="text-3xl font-bold leading-tight">{event.title}</h2>
         </div>
-        {event.voice && ready && !reaction && voiceSlot}
+        {ready && (event.voice || reaction) && voiceSlot}
       </div>
 
       <div className="mt-4 space-y-2 min-h-[5.5rem]">
         {event.dialogue.slice(0, shown).map((l, i) => <Speech key={i} line={l} />)}
       </div>
 
-      {ready && !reaction && event.conversations?.map((conversation) => <details key={conversation.label} className="mt-3 rounded border border-line p-3" onToggle={(e) => { if (e.currentTarget.open) onSpeaker(conversation.lines[0]?.who) }}>
+      {ready && !reaction && event.conversations?.map((conversation) => <details key={conversation.label} className="mt-3 rounded border border-line p-3" onToggle={(e) => { if (e.currentTarget.open) { onSpeaker(conversation.lines[0]?.who); speakLines(conversation.lines, `${event.id}:conversation:${conversation.label}`) } }}>
         <summary className="cursor-pointer text-sm text-mint focus-visible:ring-2 focus-visible:ring-mint">{conversation.label}</summary>
         <section className="mt-3 space-y-2">{conversation.lines.map((line, i) => <Speech key={i} line={line} />)}</section>
       </details>)}

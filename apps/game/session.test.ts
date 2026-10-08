@@ -38,6 +38,8 @@ test('mints an auto-choice router that refuses to guess', async () => {
     assert.match(responses.instructions, /Never guess, pick the closest/)
     assert.match(responses.instructions, /bare mention of Devin never selects send_devin/)
     assert.match(body.session.instructions, /wait for the game.s scripted reaction/)
+    assert.match(body.session.instructions, /Always speak English in a male voice/)
+    assert.doesNotMatch(body.session.instructions, /Speak Russian in all replies|Russian phrasing|Clear Russian delivery/)
     assert.doesNotMatch(body.session.instructions, /say one short line while the backend works/)
   } finally {
     globalThis.fetch = originalFetch

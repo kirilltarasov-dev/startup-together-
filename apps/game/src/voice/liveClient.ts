@@ -139,6 +139,7 @@ export function createLiveClient(): LiveClient {
   let disconnectTimer: ReturnType<typeof setTimeout> | null = null
   let transcriptTimer: ReturnType<typeof setTimeout> | null = null
   let commandTranscript = ''
+  let commandContextId: string | null = null
   let lastCtxId: string | null = null
   /** Full delegation.responses from the server; null until the session response arrives. */
   let baseResponses: ResponsesConfig | null = null
@@ -364,15 +365,20 @@ export function createLiveClient(): LiveClient {
   const noteExternalChoice = (eventId: string, choiceId: string) => {
     resolvedEvents.add(eventId)
     send({ type: 'session.instructions.append', delegation_id: null, content: SILENT_AFTER_CHOICE(choiceId) })
-    if (lastPushedText) sendDelegation(lastPushedText, 'none')
+    const current = getVoiceContext()
+    if (current) sendDelegation(current.contextText, resolvedEvents.has(current.eventId) ? 'none' : 'auto')
   }
 
   const tryTranscriptChoice = () => {
     transcriptTimer = null
     const transcript = commandTranscript.trim()
+    const transcriptContextId = commandContextId
     commandTranscript = ''
+    commandContextId = null
     const ctx = getVoiceContext()
-    if (!transcript || !ctx || state.muted || micHeld || !conversationVisible || resolvedEvents.has(ctx.eventId)) return
+    if (!transcript || !ctx || ctx.eventId !== transcriptContextId || state.muted || replyHold || !conversationVisible || resolvedEvents.has(ctx.eventId)) return
+    const finishingContinue = chooseInFlight && ctx.allowedChoices.length === 1 && ctx.allowedChoices[0].id === 'continue'
+    if (micHeld && !finishingContinue) return
     const choiceId = matchChoice(transcript, ctx.allowedChoices)
     if (!choiceId) return
     const ok = dispatchVoiceChoice(ctx.eventId, choiceId)
@@ -383,7 +389,12 @@ export function createLiveClient(): LiveClient {
   }
 
   const noteCommandTranscript = (delta: string) => {
-    if (state.muted || micHeld || !conversationVisible) { commandTranscript = ''; return }
+    if (state.muted || replyHold || !conversationVisible) { commandTranscript = ''; commandContextId = null; return }
+    // Processing closes capture, but must not erase a command heard just before delegation.
+    if (micHeld) return
+    const contextId = getVoiceContext()?.eventId ?? null
+    if (contextId !== commandContextId) commandTranscript = ''
+    commandContextId = contextId
     commandTranscript = (commandTranscript + delta).slice(-300)
     if (transcriptTimer) clearTimeout(transcriptTimer)
     transcriptTimer = setTimeout(tryTranscriptChoice, TRANSCRIPT_SETTLE_MS)
@@ -447,7 +458,8 @@ export function createLiveClient(): LiveClient {
     if (ok || resolvedEvents.has(eventId)) {
       // A valid choice (or a known duplicate) disarms the router. Rejections leave the active
       // event on auto so a later valid tool result can still resolve it.
-      if (lastPushedText) sendDelegation(lastPushedText, 'none')
+      const current = getVoiceContext()
+      if (current) sendDelegation(current.contextText, resolvedEvents.has(current.eventId) ? 'none' : 'auto')
     }
     send({ type: 'response.create' })
     // Choose is no longer in flight: the stage manager may resume scripted lines.

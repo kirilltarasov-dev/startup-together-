@@ -143,7 +143,7 @@ async function run(): Promise<void> {
 
 function onPayload(p: SpeakPayload): void {
   if (!storyVisible || consumed.has(p.tag)) return
-  const eventId = /^E\d+:/.exec(p.tag)?.[0].slice(0, -1)
+  const eventId = /^[EC]\d+:/.exec(p.tag)?.[0].slice(0, -1)
   const reaction = /:reaction:/.test(p.tag)
   if (reaction || (eventId && activeEventId && eventId !== activeEventId)) {
     stageCut()
